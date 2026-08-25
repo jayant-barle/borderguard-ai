@@ -1,0 +1,13 @@
+
+<svg width="240" height="300" viewBox="0 0 240 300" xmlns="http://www.w3.org/2000/svg">
+  <rect width="240" height="300" fill="#f1f5f9"/>
+  <circle cx="120" cy="110" r="55" fill="#0284c7"/>
+  <path d="M 40,270 C 40,195 200,195 200,270 Z" fill="#0369a1"/>
+  <path d="M 68,100 C 68,45 172,45 172,100 C 172,135 152,155 120,155 C 88,155 68,135 68,100 Z" fill="#fbcfe8"/>
+  <path d="M 62,90 C 62,35 178,35 178,90 C 178,115 165,100 120,80 C 75,100 62,115 62,90 Z" fill="#1e293b"/>
+  <circle cx="102" cy="100" r="5" fill="#1e293b"/>
+  <circle cx="138" cy="100" r="5" fill="#1e293b"/>
+  <path d="M 112,126 Q 120,134 128,126" stroke="#be185d" stroke-width="2.5" fill="none"/>
+  <rect x="10" y="10" width="220" height="280" fill="none" stroke="#94a3b8" stroke-width="1.5"/>
+  <text x="20" y="285" font-family="Arial, sans-serif" font-size="9" font-weight="bold" fill="#475569">CENTRAL BIOMETRIC REGISTRY</text>
+</svg>

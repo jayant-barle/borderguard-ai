@@ -1,0 +1,123 @@
+
+<svg width="800" height="520" viewBox="0 0 800 520" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <pattern id="guilloche2" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 0,20 Q 10,0 20,20 T 40,20 M 0,20 Q 10,40 20,20 T 40,20" fill="none" stroke="#d4e3fc" stroke-width="0.75" opacity="0.7"/>
+      <circle cx="20" cy="20" r="12" fill="none" stroke="#e2e8f0" stroke-width="0.5" opacity="0.5"/>
+    </pattern>
+    <linearGradient id="passportBg2" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="50%" stop-color="#f8fafc"/>
+      <stop offset="100%" stop-color="#f1f5f9"/>
+    </linearGradient>
+    <filter id="subtleShadow2" x="-5%" y="-5%" width="110%" height="110%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#0f172a" flood-opacity="0.15"/>
+    </filter>
+  </defs>
+
+  <!-- Document Card Outer Shell -->
+  <rect x="20" y="20" width="760" height="480" rx="16" fill="url(#passportBg2)" stroke="#cbd5e1" stroke-width="2" filter="url(#subtleShadow2)"/>
+  <rect x="20" y="20" width="760" height="480" rx="16" fill="url(#guilloche2)"/>
+
+  <!-- Gold Foil Emblem & Header -->
+  <rect x="20" y="20" width="760" height="58" rx="16" fill="#0f172a"/>
+  <rect x="20" y="60" width="760" height="18" fill="#0f172a"/>
+  
+  <text x="50" y="48" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#f8fafc" letter-spacing="2">REPUBLIC OF INDIA / RÉPUBLIQUE D'INDE</text>
+  <text x="50" y="68" font-family="Arial, sans-serif" font-size="11" font-weight="600" fill="#94a3b8" letter-spacing="1">PASSPORT / PASSEPORT</text>
+  <text x="680" y="52" font-family="Courier, monospace" font-size="18" font-weight="bold" fill="#fbbf24">IND</text>
+
+  <!-- Specimen Identifier Marker -->
+  <!-- SPECIMEN_TAMPERED_PASSPORT -->
+  <rect x="520" y="32" width="130" height="22" rx="4" fill="#991b1b" stroke="#f87171" stroke-width="1"/>
+  <text x="532" y="47" font-family="Arial, sans-serif" font-size="10" font-weight="bold" fill="#ffffff" letter-spacing="1">DEMO SPECIMEN 2</text>
+
+  <!-- Security Hologram Chip Icon -->
+  <rect x="50" y="90" width="34" height="26" rx="4" fill="#fef3c7" stroke="#d97706" stroke-width="1"/>
+  <line x1="50" y1="103" x2="84" y2="103" stroke="#b45309" stroke-width="1.5"/>
+  <circle cx="67" cy="103" r="5" fill="#fde68a" stroke="#b45309" stroke-width="1"/>
+
+  <!-- Tampered / Replaced Photograph Box (Different individual inserted into Ananya Verma document shell) -->
+  <g id="photo-box-tampered">
+    <!-- Notice distinct border artifact and warm lighting shift -->
+    <rect x="48" y="128" width="164" height="204" rx="4" fill="#fed7aa" stroke="#ea580c" stroke-width="1.5" stroke-dasharray="6,2"/>
+    <rect x="50" y="130" width="160" height="200" rx="4" fill="#ffedd5"/>
+    
+    <!-- Male/Different subject silhouette with warm lighting profile -->
+    <circle cx="130" cy="190" r="40" fill="#ea580c" opacity="0.8"/>
+    <path d="M 75,320 C 75,255 185,255 185,320 Z" fill="#c2410c" opacity="0.85"/>
+    <!-- Different facial geometry (wider jaw, glasses, short cropped hair) -->
+    <path d="M 92,185 C 92,145 168,145 168,185 C 168,225 158,235 130,235 C 102,235 92,225 92,185 Z" fill="#fed7aa"/>
+    <path d="M 88,175 C 88,135 172,135 172,175 C 172,185 160,165 130,165 C 100,165 88,185 88,175 Z" fill="#0f172a"/>
+    <!-- Glasses -->
+    <rect x="106" y="180" width="20" height="14" rx="2" fill="none" stroke="#0f172a" stroke-width="2"/>
+    <rect x="134" y="180" width="20" height="14" rx="2" fill="none" stroke="#0f172a" stroke-width="2"/>
+    <line x1="126" y1="187" x2="134" y2="187" stroke="#0f172a" stroke-width="2"/>
+    <circle cx="116" cy="187" r="3" fill="#0f172a"/>
+    <circle cx="144" cy="187" r="3" fill="#0f172a"/>
+    <line x1="122" y1="215" x2="138" y2="215" stroke="#9a3412" stroke-width="2"/>
+
+    <!-- Discontinuous guilloche lines (demonstrating photo replacement / truncated background lines) -->
+    <path d="M 45,240 L 49,240" stroke="#38bdf8" stroke-width="1"/>
+    <path d="M 211,240 L 215,240" stroke="#38bdf8" stroke-width="1"/>
+    <text x="56" y="322" font-family="Arial, sans-serif" font-size="8" font-weight="bold" fill="#c2410c">SUBSTITUTED PORTRAIT</text>
+  </g>
+
+  <!-- Ghost Portrait / Watermark -->
+  <g opacity="0.25">
+    <rect x="650" y="160" width="70" height="90" rx="4" fill="#94a3b8"/>
+    <circle cx="685" cy="190" r="18" fill="#475569"/>
+    <path d="M 660,240 C 660,215 710,215 710,240 Z" fill="#475569"/>
+  </g>
+
+  <!-- Document Fields Table (Exact same valid identity data as Scenario 1) -->
+  <g font-family="Arial, sans-serif" fill="#0f172a">
+    <!-- Type / Country / Passport No -->
+    <text x="240" y="110" font-size="9" font-weight="bold" fill="#64748b">TYPE / TYPE</text>
+    <text x="240" y="126" font-size="13" font-weight="bold">P</text>
+
+    <text x="320" y="110" font-size="9" font-weight="bold" fill="#64748b">COUNTRY CODE</text>
+    <text x="320" y="126" font-size="13" font-weight="bold">IND</text>
+
+    <text x="440" y="110" font-size="9" font-weight="bold" fill="#64748b">PASSPORT NO. / NO. DU PASSEPORT</text>
+    <text x="440" y="126" font-size="15" font-weight="bold" fill="#0369a1" letter-spacing="1">P94821037</text>
+
+    <!-- Surname -->
+    <text x="240" y="156" font-size="9" font-weight="bold" fill="#64748b">SURNAME / NOM</text>
+    <text x="240" y="174" font-size="15" font-weight="bold" letter-spacing="1">VERMA</text>
+
+    <!-- Given Names -->
+    <text x="240" y="202" font-size="9" font-weight="bold" fill="#64748b">GIVEN NAMES / PRÉNOMS</text>
+    <text x="240" y="220" font-size="15" font-weight="bold" letter-spacing="1">ANANYA</text>
+
+    <!-- Nationality & Sex -->
+    <text x="240" y="248" font-size="9" font-weight="bold" fill="#64748b">NATIONALITY / NATIONALITÉ</text>
+    <text x="240" y="264" font-size="13" font-weight="bold">INDIAN</text>
+
+    <text x="440" y="248" font-size="9" font-weight="bold" fill="#64748b">SEX / SEXE</text>
+    <text x="440" y="264" font-size="13" font-weight="bold">F</text>
+
+    <!-- Date of Birth & Place of Birth -->
+    <text x="240" y="292" font-size="9" font-weight="bold" fill="#64748b">DATE OF BIRTH / DATE DE NAISSANCE</text>
+    <text x="240" y="308" font-size="13" font-weight="bold">18/06/1994</text>
+
+    <text x="440" y="292" font-size="9" font-weight="bold" fill="#64748b">PLACE OF BIRTH / LIEU DE NAISSANCE</text>
+    <text x="440" y="308" font-size="13" font-weight="bold">NEW DELHI, INDIA</text>
+
+    <!-- Date of Issue & Date of Expiry -->
+    <text x="240" y="336" font-size="9" font-weight="bold" fill="#64748b">DATE OF ISSUE / DATE DE DÉLIVRANCE</text>
+    <text x="240" y="352" font-size="13" font-weight="bold">12/04/2021</text>
+
+    <text x="440" y="336" font-size="9" font-weight="bold" fill="#64748b">DATE OF EXPIRY / DATE D'EXPIRATION</text>
+    <text x="440" y="352" font-size="13" font-weight="bold" fill="#047857">11/04/2031</text>
+  </g>
+
+  <!-- Microprint Security Divider -->
+  <line x1="40" y1="385" x2="760" y2="385" stroke="#94a3b8" stroke-dasharray="3,3" stroke-width="1"/>
+  <text x="45" y="395" font-family="Courier, monospace" font-size="7" fill="#64748b">REPUBLICOFINDIAPASSPORTDOCUMENTOFFICIALSPECIMENREPUBLICOFINDIAPASSPORTDOCUMENTOFFICIALSPECIMEN</text>
+
+  <!-- Machine Readable Zone (MRZ TD3 Format - Fully Valid) -->
+  <rect x="35" y="415" width="730" height="75" rx="6" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1"/>
+  <text x="50" y="445" font-family="Courier, monospace" font-size="16" font-weight="bold" fill="#0f172a" letter-spacing="4">P&lt;INDOVERMA&lt;&lt;ANANYA&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;</text>
+  <text x="50" y="475" font-family="Courier, monospace" font-size="16" font-weight="bold" fill="#0f172a" letter-spacing="4">P948210377IND9406184F3104114&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;06</text>
+</svg>
