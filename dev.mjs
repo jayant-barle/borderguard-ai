@@ -15,9 +15,8 @@ tsc.on('close', (code) => {
   console.log('✓ Server compilation complete.\n');
 
   // 2. Start backend server
-  const server = spawn('node', ['dist-server/server/src/index.js'], {
-    stdio: 'inherit',
-    shell: true
+  const server = spawn(process.execPath, ['dist-server/server/src/index.js'], {
+    stdio: 'inherit'
   });
 
   // 3. Start frontend Vite dev server
