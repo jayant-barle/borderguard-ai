@@ -99,10 +99,7 @@ router.post('/process', authenticateToken, upload.single('document'), async (req
     // Step 4: MRZ Validation
     const mrz = MRZValidationService.validate(scenarioResult.scenario, ocr, ocr.mrzLines);
 
-    // Step 5: Tampering Analysis
-    const tampering = TamperingService.analyze(imageBuffer, scenarioResult.scenario);
-
-    // Step 6: Central Database Verification
+    // Step 5: Central Database Verification
     const databaseVerification = IdentityMatchingService.verifyInDatabase(
       ocr.fields.documentNumber.value,
       ocr.fields.fullName.value,
@@ -110,12 +107,16 @@ router.post('/process', authenticateToken, upload.single('document'), async (req
       ocr.fields.expiryDate.value
     );
 
-    // Step 7: Face Extraction & Biometric Comparison
+    // Step 6: Face Extraction & Biometric Comparison against Database Reference
     const faceVerification = await FaceVerificationService.verify(
       imageBuffer,
       scenarioResult.scenario,
       databaseVerification.photoUrl
     );
+
+    // Step 7: Dynamic Substrate & Photo Tampering Analysis
+    const isBiometricMismatch = faceVerification.consistency === 'POSSIBLE_MISMATCH' || faceVerification.similarityScore < 60;
+    const tampering = await TamperingService.analyze(imageBuffer, scenarioResult.scenario, isBiometricMismatch);
 
     // Step 8: Multidimensional Risk Calculation Engine
     const risk = RiskEngine.calculate(

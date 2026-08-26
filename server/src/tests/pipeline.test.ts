@@ -62,7 +62,7 @@ async function runPipelineTests() {
     throw new Error('Test 1 Failed: MRZ validation did not pass');
   }
 
-  const s1Tampering = TamperingService.analyze(p1Buffer, s1Scenario.scenario);
+  const s1Tampering = await TamperingService.analyze(p1Buffer, s1Scenario.scenario);
   console.log(`[TamperingService] Detected: ${s1Tampering.detected} | Confidence: ${s1Tampering.confidence}%`);
   if (s1Tampering.detected !== false) {
     throw new Error('Test 1 Failed: False tampering detected on genuine document');
@@ -110,7 +110,7 @@ async function runPipelineTests() {
   const s2Quality = ImageQualityService.analyze(p2Buffer, s2Scenario.scenario);
   const s2Ocr = await OCRService.extractFields(p2Buffer, s2Scenario.scenario);
   const s2Mrz = MRZValidationService.validate(s2Scenario.scenario, s2Ocr);
-  const s2Tampering = TamperingService.analyze(p2Buffer, s2Scenario.scenario);
+  const s2Tampering = await TamperingService.analyze(p2Buffer, s2Scenario.scenario);
   const s2Face = await FaceVerificationService.verify(p2Buffer, s2Scenario.scenario);
   const s2Db = IdentityMatchingService.verifyInDatabase(
     s2Ocr.fields.documentNumber.value,
@@ -163,7 +163,7 @@ async function runPipelineTests() {
   if (unknownScenario.scenario !== 'UNKNOWN') {
     throw new Error('Test 4 Failed: Expected UNKNOWN classification');
   }
-  const unkTamp = TamperingService.analyze(randomBuffer, unknownScenario.scenario);
+  const unkTamp = await TamperingService.analyze(randomBuffer, unknownScenario.scenario);
   if (unkTamp.detected !== false) {
     throw new Error('Test 4 Failed: Should not falsely fabricate tampering on unknown files');
   }

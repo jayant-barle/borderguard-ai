@@ -38,7 +38,7 @@ async function runOllamaTests() {
   const scenario = 'PHOTO_REPLACEMENT';
   const ocr = await OCRService.extractFields(dummyBuffer, scenario, 'test.jpg');
   const mrz = MRZValidationService.validate(scenario, ocr);
-  const tampering = TamperingService.analyze(dummyBuffer, scenario);
+  const tampering = await TamperingService.analyze(dummyBuffer, scenario);
   const face = await FaceVerificationService.verify(dummyBuffer, scenario);
   const quality = ImageQualityService.analyze(dummyBuffer, scenario);
   const database = IdentityMatchingService.verifyInDatabase(
