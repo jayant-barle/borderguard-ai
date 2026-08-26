@@ -10,16 +10,13 @@ if (!fs.existsSync(dataDir)) {
 const dbPath = path.join(dataDir, 'borderguard.db');
 export const db = new Database(dbPath);
 
-// Cache prepared statements to prevent GC destructor assertion issues on Node 24+
-const stmtCache = new Map<string, any>();
-const rawPrepare = db.prepare.bind(db);
+// Prevent Node 24 V8 isolate GC destructor assertion on better-sqlite3 native statements
+const statementRegistry = new Set<any>();
+const origPrepare = db.prepare.bind(db);
 db.prepare = function (source: string) {
-  let cached = stmtCache.get(source);
-  if (!cached) {
-    cached = rawPrepare(source);
-    stmtCache.set(source, cached);
-  }
-  return cached;
+  const stmt = origPrepare(source);
+  statementRegistry.add(stmt);
+  return stmt;
 } as any;
 
 // Enable foreign keys and WAL mode for high performance

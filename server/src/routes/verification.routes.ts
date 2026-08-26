@@ -13,7 +13,8 @@ import { TamperingService } from '../services/TamperingService';
 import { FaceVerificationService } from '../services/FaceVerificationService';
 import { IdentityMatchingService } from '../services/IdentityMatchingService';
 import { RiskEngine } from '../services/RiskEngine';
-import { DocumentType, VerificationResult } from '../../../shared/types';
+import { OllamaService } from '../services/OllamaService';
+import { DocumentType, VerificationResult, AIMode } from '../../../shared/types';
 
 const router = Router();
 
@@ -92,24 +93,28 @@ router.post('/process', authenticateToken, upload.single('document'), async (req
     // Step 2: Image Quality Analysis
     const imageQuality = ImageQualityService.analyze(imageBuffer, scenarioResult.scenario);
 
-    // Step 3: OCR Extraction
-    const ocr = OCRService.extractFields(imageBuffer, scenarioResult.scenario, filename);
+    // Step 3: OCR Extraction (VLM + Local Tesseract + SVG text)
+    const ocr = await OCRService.extractFields(imageBuffer, scenarioResult.scenario, filename);
 
     // Step 4: MRZ Validation
-    const mrz = MRZValidationService.validate(scenarioResult.scenario, ocr);
+    const mrz = MRZValidationService.validate(scenarioResult.scenario, ocr, ocr.mrzLines);
 
     // Step 5: Tampering Analysis
     const tampering = TamperingService.analyze(imageBuffer, scenarioResult.scenario);
 
-    // Step 6: Face Verification
-    const faceVerification = FaceVerificationService.verify(imageBuffer, scenarioResult.scenario);
-
-    // Step 7: Central Database Verification
+    // Step 6: Central Database Verification
     const databaseVerification = IdentityMatchingService.verifyInDatabase(
       ocr.fields.documentNumber.value,
       ocr.fields.fullName.value,
       ocr.fields.dateOfBirth.value,
       ocr.fields.expiryDate.value
+    );
+
+    // Step 7: Face Extraction & Biometric Comparison
+    const faceVerification = await FaceVerificationService.verify(
+      imageBuffer,
+      scenarioResult.scenario,
+      databaseVerification.photoUrl
     );
 
     // Step 8: Multidimensional Risk Calculation Engine
@@ -121,6 +126,34 @@ router.post('/process', authenticateToken, upload.single('document'), async (req
       ocr,
       imageQuality
     );
+
+    // Step 9: Real LLM AI Forensic Analysis via Ollama (http://localhost:11434)
+    let ollamaAnalysis;
+    try {
+      ollamaAnalysis = await OllamaService.generateForensicAnalysis({
+        holderName: ocr.fields.fullName.value,
+        documentNumber: ocr.fields.documentNumber.value,
+        documentType,
+        ocr,
+        mrz,
+        tampering,
+        face: faceVerification,
+        database: databaseVerification,
+        risk,
+        scenario: scenarioResult.scenario,
+        imageBase64: imageBuffer.toString('base64')
+      });
+
+      // Enrich explainability with Ollama interview recommendations if present
+      if (risk.whySuspicious && ollamaAnalysis.interviewQuestions?.length > 0) {
+        risk.whySuspicious.investigationGuidance = [
+          ...risk.whySuspicious.investigationGuidance,
+          `AI Questioning: "${ollamaAnalysis.interviewQuestions[0]}"`
+        ];
+      }
+    } catch (ollamaErr: any) {
+      console.warn('Ollama analysis generation warning:', ollamaErr.message);
+    }
 
     const processingTimeMs = Date.now() - startTime;
     const verificationId = `VER-${new Date().getFullYear()}-${Math.floor(100000 + Math.random() * 900000)}`;
@@ -135,7 +168,7 @@ router.post('/process', authenticateToken, upload.single('document'), async (req
       documentImage: imagePath,
       documentNumber: ocr.fields.documentNumber.value,
       holderName: ocr.fields.fullName.value,
-      aiMode: 'DEMO_MODE',
+      aiMode: ollamaAnalysis?.model?.includes('llama') ? 'OLLAMA_AI' : 'HYBRID_AI',
       scenarioDetected: scenarioResult.scenario,
       imageQuality,
       ocr,
@@ -144,6 +177,8 @@ router.post('/process', authenticateToken, upload.single('document'), async (req
       faceVerification,
       databaseVerification,
       risk,
+      ollamaAnalysis,
+      aiExecutiveSummary: ollamaAnalysis?.executiveSummary,
       processingTimeMs
     };
 

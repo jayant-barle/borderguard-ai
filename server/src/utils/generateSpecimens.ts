@@ -125,7 +125,7 @@ const genuinePassportSvg = `
   <!-- Machine Readable Zone (MRZ TD3 Format) -->
   <rect x="35" y="415" width="730" height="75" rx="6" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1"/>
   <text x="50" y="445" font-family="Courier, monospace" font-size="16" font-weight="bold" fill="#0f172a" letter-spacing="4">P&lt;INDOVERMA&lt;&lt;ANANYA&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;</text>
-  <text x="50" y="475" font-family="Courier, monospace" font-size="16" font-weight="bold" fill="#0f172a" letter-spacing="4">P948210375IND9406188F3104116&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;06</text>
+  <text x="50" y="475" font-family="Courier, monospace" font-size="16" font-weight="bold" fill="#0f172a" letter-spacing="4">P948210375IND9406188F3104116&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;00</text>
 </svg>
 `;
 
@@ -251,7 +251,7 @@ const tamperedPassportSvg = `
   <!-- Machine Readable Zone (MRZ TD3 Format - Fully Valid) -->
   <rect x="35" y="415" width="730" height="75" rx="6" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1"/>
   <text x="50" y="445" font-family="Courier, monospace" font-size="16" font-weight="bold" fill="#0f172a" letter-spacing="4">P&lt;INDOVERMA&lt;&lt;ANANYA&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;</text>
-  <text x="50" y="475" font-family="Courier, monospace" font-size="16" font-weight="bold" fill="#0f172a" letter-spacing="4">P948210377IND9406184F3104114&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;06</text>
+  <text x="50" y="475" font-family="Courier, monospace" font-size="16" font-weight="bold" fill="#0f172a" letter-spacing="4">P948210375IND9406188F3104116&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;00</text>
 </svg>
 `;
 
@@ -329,5 +329,3 @@ export function generateAllSpecimens() {
   console.log(` - Specimen 1 (Genuine): ${p1Path} (SHA256: ${hash1.slice(0, 12)}...)`);
   console.log(` - Specimen 2 (Tampered): ${p2Path} (SHA256: ${hash2.slice(0, 12)}...)`);
 }
-
-generateAllSpecimens();

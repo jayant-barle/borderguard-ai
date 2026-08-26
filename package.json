@@ -4,13 +4,16 @@
   "description": "AI-Powered Identity & Document Screening for Faster, Safer Verification",
   "main": "server/src/index.ts",
   "scripts": {
-    "dev": "concurrently -n \"SERVER,CLIENT\" -c \"blue,magenta\" \"npm run server:dev\" \"npm run client:dev\"",
-    "server:dev": "tsx server/src/index.ts",
+    "dev": "node dev.mjs",
+    "build:server": "tsc",
+    "server:dev": "node dist-server/server/src/index.js",
     "client:dev": "npm run --prefix client dev",
     "client:build": "npm run --prefix client build",
-    "build": "npm run client:build",
-    "start": "tsx server/src/index.ts",
-    "test:pipeline": "tsx server/src/tests/pipeline.test.ts"
+    "build": "npm run build:server && npm run client:build",
+    "start": "node dist-server/server/src/index.js",
+    "test:pipeline": "tsc && node dist-server/server/src/tests/pipeline.test.js",
+    "test:ollama": "tsc && node dist-server/server/src/tests/ollama.test.js",
+    "test:api": "tsc && node dist-server/server/src/tests/api.test.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -21,6 +24,8 @@
     "isomorphic-git": "^1.41.9",
     "jsonwebtoken": "^9.0.2",
     "multer": "^1.4.5-lts.1",
+    "sharp": "^0.35.4",
+    "tesseract.js": "^7.0.0",
     "zod": "^3.24.2"
   },
   "devDependencies": {
@@ -31,6 +36,7 @@
     "@types/jsonwebtoken": "^9.0.8",
     "@types/multer": "^1.4.12",
     "@types/node": "^22.13.4",
+    "@types/sharp": "^0.31.1",
     "concurrently": "^9.1.2",
     "ts-node": "^10.9.2",
     "tsx": "^4.19.3",

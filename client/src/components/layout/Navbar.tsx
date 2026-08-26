@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Menu, Activity, Clock, Shield, PlusCircle } from 'lucide-react';
+import { Menu, Activity, Clock, Shield, PlusCircle, Bot, Sparkles, Cpu } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { api } from '../../services/api';
+import { OllamaStatus } from '../../../../shared/types';
 
 interface NavbarProps {
   onToggleSidebar: () => void;
@@ -10,6 +12,7 @@ interface NavbarProps {
 
 export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, title }) => {
   const [timeStr, setTimeStr] = useState<string>('');
+  const [ollamaStatus, setOllamaStatus] = useState<OllamaStatus | null>(null);
   const { user } = useAuth();
   const navigate = useNavigate();
 
@@ -23,6 +26,27 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, title }) => {
     };
     updateTime();
     const interval = setInterval(updateTime, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Poll Ollama status periodically
+  useEffect(() => {
+    const checkOllama = async () => {
+      try {
+        const status = await api.ai.getStatus();
+        setOllamaStatus(status);
+      } catch {
+        setOllamaStatus({
+          connected: false,
+          baseUrl: 'http://localhost:11434',
+          activeModel: 'llama3.2:1b',
+          availableModels: []
+        });
+      }
+    };
+
+    checkOllama();
+    const interval = setInterval(checkOllama, 10000);
     return () => clearInterval(interval);
   }, []);
 
@@ -47,20 +71,41 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, title }) => {
         </div>
       </div>
 
-      <div className="flex items-center space-x-3 sm:space-x-4">
+      <div className="flex items-center space-x-2.5 sm:space-x-3">
         {/* Real-time Digital Clock */}
-        <div className="hidden md:flex items-center space-x-1.5 px-3 py-1 rounded-md bg-slate-100 border border-slate-200/80 text-xs font-mono text-slate-700">
+        <div className="hidden lg:flex items-center space-x-1.5 px-3 py-1 rounded-md bg-slate-100 border border-slate-200/80 text-xs font-mono text-slate-700">
           <Clock className="w-3.5 h-3.5 text-blue-600" />
           <span>{timeStr}</span>
         </div>
 
+        {/* Ollama Local AI Engine Status Badge */}
+        <div
+          className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-md border text-xs font-medium cursor-pointer transition-all ${
+            ollamaStatus?.connected
+              ? 'bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100'
+              : 'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100'
+          }`}
+          onClick={() => navigate('/admin/risk-settings')}
+          title={`Ollama URL: ${ollamaStatus?.baseUrl || 'http://localhost:11434'} (Click to configure in settings)`}
+        >
+          <Bot className="w-3.5 h-3.5 text-indigo-600" />
+          <span className="hidden sm:inline font-semibold">
+            {ollamaStatus?.connected ? `Ollama: ${ollamaStatus.activeModel}` : 'Ollama: Connecting'}
+          </span>
+          <span
+            className={`w-2 h-2 rounded-full ${
+              ollamaStatus?.connected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'
+            }`}
+          />
+        </div>
+
         {/* System Health Badge */}
-        <div className="flex items-center space-x-1.5 px-2.5 py-1 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-medium">
+        <div className="hidden sm:flex items-center space-x-1.5 px-2.5 py-1 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-medium">
           <span className="relative flex h-2 w-2">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
             <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
           </span>
-          <span className="hidden sm:inline">Engine Active</span>
+          <span className="hidden md:inline">Engine Active</span>
         </div>
 
         {/* Quick New Verification Button */}

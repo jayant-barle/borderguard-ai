@@ -5,7 +5,10 @@ import {
   DashboardMetrics,
   RiskConfig,
   AuditLog,
-  DocumentType
+  DocumentType,
+  OllamaStatus,
+  AIChatMessage,
+  AIForensicAnalysis
 } from '../../../shared/types';
 
 const API_BASE = '/api';
@@ -169,5 +172,40 @@ export const api = {
           expectedRiskScore: number;
         }>
       >('/specimens')
+  },
+
+  // Ollama & AI Local Intelligence Engine
+  ai: {
+    getStatus: () => request<OllamaStatus>('/ai/status'),
+    chat: (messages: AIChatMessage[], dossierContext?: VerificationResult | null) =>
+      request<{ message: AIChatMessage; model: string }>('/ai/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages, dossierContext })
+      }),
+    analyze: (payload: any) =>
+      request<AIForensicAnalysis>('/ai/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      }),
+    switchModel: (model: string) =>
+      request<{ success: boolean; message: string; status: OllamaStatus }>('/ai/models/switch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model })
+      }),
+    pullModel: (model: string) =>
+      request<{ success: boolean; message: string }>('/ai/models/pull', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model })
+      }),
+    updateConfig: (baseUrl: string) =>
+      request<{ success: boolean; message: string; status: OllamaStatus }>('/ai/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ baseUrl })
+      })
   }
 };

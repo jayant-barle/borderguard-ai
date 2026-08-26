@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { RiskConfig } from '../../../../shared/types';
+import { RiskConfig, OllamaStatus } from '../../../../shared/types';
 import { api } from '../../services/api';
-import { Sliders, CheckCircle2, AlertTriangle, RefreshCw, Save, RotateCcw } from 'lucide-react';
+import { Sliders, CheckCircle2, AlertTriangle, RefreshCw, Save, RotateCcw, Bot, Cpu, Download, Sparkles, Server } from 'lucide-react';
 
 export const RiskSettings: React.FC = () => {
   const [config, setConfig] = useState<RiskConfig | null>(null);
@@ -9,6 +9,15 @@ export const RiskSettings: React.FC = () => {
   const [saving, setSaving] = useState<boolean>(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Ollama AI Engine state
+  const [ollamaStatus, setOllamaStatus] = useState<OllamaStatus | null>(null);
+  const [ollamaUrl, setOllamaUrl] = useState<string>('http://localhost:11434');
+  const [selectedModel, setSelectedModel] = useState<string>('llama3.2:1b');
+  const [newModelName, setNewModelName] = useState<string>('');
+  const [pullingModel, setPullingModel] = useState<boolean>(false);
+  const [testingOllama, setTestingOllama] = useState<boolean>(false);
+  const [ollamaMsg, setOllamaMsg] = useState<string | null>(null);
 
   // Form states
   const [tamperingWeight, setTamperingWeight] = useState<number>(30);
@@ -51,9 +60,85 @@ export const RiskSettings: React.FC = () => {
     }
   };
 
+  const loadOllama = async () => {
+    try {
+      const status = await api.ai.getStatus();
+      setOllamaStatus(status);
+      setOllamaUrl(status.baseUrl);
+      if (status.activeModel) setSelectedModel(status.activeModel);
+    } catch {
+      setOllamaStatus({
+        connected: false,
+        baseUrl: ollamaUrl,
+        activeModel: selectedModel,
+        availableModels: [],
+        error: 'Failed to connect to Ollama'
+      });
+    }
+  };
+
   useEffect(() => {
     loadConfig();
+    loadOllama();
   }, []);
+
+  const handleTestOllama = async () => {
+    setTestingOllama(true);
+    setOllamaMsg(null);
+    try {
+      const status = await api.ai.getStatus();
+      setOllamaStatus(status);
+      if (status.connected) {
+        setOllamaMsg(`✓ Connected to Ollama (Version ${status.version || '0.33+'}) - Active Model: ${status.activeModel}`);
+      } else {
+        setOllamaMsg(`⚠️ Could not reach Ollama at ${status.baseUrl}`);
+      }
+    } catch (err: any) {
+      setOllamaMsg(`❌ Ollama connection error: ${err.message}`);
+    } finally {
+      setTestingOllama(false);
+    }
+  };
+
+  const handleSwitchModel = async (model: string) => {
+    if (!model) return;
+    try {
+      const res = await api.ai.switchModel(model);
+      setSelectedModel(model);
+      setOllamaStatus(res.status);
+      setOllamaMsg(`✓ Switched active Ollama model to ${model}`);
+    } catch (err: any) {
+      setOllamaMsg(`❌ Failed to switch model: ${err.message}`);
+    }
+  };
+
+  const handlePullModel = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newModelName.trim() || pullingModel) return;
+    setPullingModel(true);
+    setOllamaMsg(`Initiating pull for model "${newModelName.trim()}" in Ollama...`);
+    try {
+      const res = await api.ai.pullModel(newModelName.trim());
+      setOllamaMsg(res.message);
+      setNewModelName('');
+      setTimeout(loadOllama, 3000);
+    } catch (err: any) {
+      setOllamaMsg(`❌ Failed to pull model: ${err.message}`);
+    } finally {
+      setPullingModel(false);
+    }
+  };
+
+  const handleUpdateUrl = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const res = await api.ai.updateConfig(ollamaUrl.trim());
+      setOllamaStatus(res.status);
+      setOllamaMsg(`✓ Ollama Base URL updated to ${ollamaUrl}`);
+    } catch (err: any) {
+      setOllamaMsg(`❌ Failed to update Ollama URL: ${err.message}`);
+    }
+  };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -141,18 +226,151 @@ export const RiskSettings: React.FC = () => {
           <span>Loading engine parameters...</span>
         </div>
       ) : (
-        <form onSubmit={handleSave} className="space-y-6">
-          {/* Factor Weights Section */}
-          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
-              <div>
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">
-                  Forensic Factor Weights (Must Sum to 100%)
-                </h4>
-                <p className="text-[11px] text-slate-400">
-                  Relative contribution of each sub-system to overall risk index.
-                </p>
+        <div className="space-y-6">
+          {/* Ollama Local AI Engine Configuration Card */}
+          <div className="bg-slate-900 text-white p-6 rounded-2xl border border-slate-800 shadow-md space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 rounded-xl bg-indigo-600/30 border border-indigo-500/40 flex items-center justify-center text-indigo-400">
+                  <Bot className="w-6 h-6" />
+                </div>
+                <div>
+                  <div className="flex items-center space-x-2">
+                    <h3 className="font-bold text-sm text-white flex items-center gap-1.5">
+                      Ollama Local AI Engine
+                      <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                    </h3>
+                    <span
+                      className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
+                        ollamaStatus?.connected
+                          ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                          : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                      }`}
+                    >
+                      {ollamaStatus?.connected ? 'CONNECTED' : 'OFFLINE / HYBRID'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400">
+                    Powers dynamic forensic reasoning, threat intelligence, and officer copilot chat at http://localhost:11434
+                  </p>
+                </div>
               </div>
+
+              <div className="flex items-center space-x-2">
+                <button
+                  type="button"
+                  onClick={handleTestOllama}
+                  disabled={testingOllama}
+                  className="inline-flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 border border-slate-700 transition-colors"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${testingOllama ? 'animate-spin text-indigo-400' : ''}`} />
+                  <span>{testingOllama ? 'Testing...' : 'Test Connection'}</span>
+                </button>
+              </div>
+            </div>
+
+            {ollamaMsg && (
+              <div className="p-3 rounded-xl bg-indigo-950/40 border border-indigo-800/50 text-xs text-indigo-200 font-mono">
+                {ollamaMsg}
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Ollama Base URL Config */}
+              <form onSubmit={handleUpdateUrl} className="space-y-2">
+                <label className="block text-xs font-semibold text-slate-300">
+                  Ollama Base URL:
+                </label>
+                <div className="flex items-center space-x-2">
+                  <div className="relative flex-1">
+                    <Server className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
+                    <input
+                      type="text"
+                      value={ollamaUrl}
+                      onChange={(e) => setOllamaUrl(e.target.value)}
+                      placeholder="http://localhost:11434"
+                      className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 rounded-xl py-2 pl-9 pr-3 text-xs text-white outline-none font-mono"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold"
+                  >
+                    Save URL
+                  </button>
+                </div>
+              </form>
+
+              {/* Active Model Selector */}
+              <div className="space-y-2">
+                <label className="block text-xs font-semibold text-slate-300">
+                  Active Ollama Model:
+                </label>
+                <div className="flex items-center space-x-2">
+                  <select
+                    value={selectedModel}
+                    onChange={(e) => handleSwitchModel(e.target.value)}
+                    className="flex-1 bg-slate-950 border border-slate-800 focus:border-indigo-500 rounded-xl p-2 text-xs text-white outline-none font-mono"
+                  >
+                    {ollamaStatus?.availableModels && ollamaStatus.availableModels.length > 0 ? (
+                      ollamaStatus.availableModels.map((m) => (
+                        <option key={m} value={m}>
+                          {m}
+                        </option>
+                      ))
+                    ) : (
+                      <>
+                        <option value="llama3.2:1b">llama3.2:1b (Recommended Fast)</option>
+                        <option value="llama3.2">llama3.2 (3B)</option>
+                        <option value="llama3">llama3 (8B)</option>
+                        <option value="mistral">mistral</option>
+                        <option value="phi3">phi3</option>
+                        <option value="qwen2.5:0.5b">qwen2.5:0.5b</option>
+                      </>
+                    )}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Pull Model Form */}
+            <form onSubmit={handlePullModel} className="pt-2 border-t border-slate-800 flex flex-wrap items-center gap-3">
+              <div className="flex-1 min-w-[200px] flex items-center space-x-2">
+                <input
+                  type="text"
+                  value={newModelName}
+                  onChange={(e) => setNewModelName(e.target.value)}
+                  placeholder="Pull model (e.g. llama3.2, mistral, llava, phi3)..."
+                  disabled={pullingModel}
+                  className="flex-1 bg-slate-950 border border-slate-800 focus:border-indigo-500 rounded-xl px-3.5 py-2 text-xs text-white outline-none font-mono"
+                />
+                <button
+                  type="submit"
+                  disabled={!newModelName.trim() || pullingModel}
+                  className="inline-flex items-center space-x-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white rounded-xl text-xs font-semibold transition-colors"
+                >
+                  <Download className={`w-3.5 h-3.5 ${pullingModel ? 'animate-bounce' : ''}`} />
+                  <span>{pullingModel ? 'Pulling...' : 'Pull Model'}</span>
+                </button>
+              </div>
+              <p className="text-[11px] text-slate-400">
+                Installed Models: {ollamaStatus?.availableModels?.join(', ') || 'None (Downloading llama3.2:1b)'}
+              </p>
+            </form>
+          </div>
+
+          <form onSubmit={handleSave} className="space-y-6">
+            {/* Factor Weights Section */}
+            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                <div>
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                    Forensic Factor Weights (Must Sum to 100%)
+                  </h4>
+                  <p className="text-[11px] text-slate-400">
+                    Relative contribution of each sub-system to overall risk index.
+                  </p>
+                </div>
 
               <div className="flex items-center space-x-2">
                 <span className="text-xs font-bold text-slate-600">Total Sum:</span>
@@ -345,6 +563,7 @@ export const RiskSettings: React.FC = () => {
             </button>
           </div>
         </form>
+      </div>
       )}
     </div>
   );

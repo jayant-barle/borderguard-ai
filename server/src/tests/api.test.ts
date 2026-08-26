@@ -159,8 +159,31 @@ async function runApiTests() {
   });
   console.log(`✓ Risk Engine Weights: Tampering=${riskConfigRes.data.tamperingWeight}%, FaceMismatch=${riskConfigRes.data.faceMismatchWeight}%, Database=${riskConfigRes.data.databaseWeight}%`);
 
+  // 8. Ollama AI Engine Endpoints
+  console.log('\n[8/8] Testing Ollama Local AI Engine (/api/ai/status & /api/ai/chat)...');
+  const aiStatus = await apiCall('/ai/status');
+  if (aiStatus.status !== 200) {
+    throw new Error(`AI status check failed: ${JSON.stringify(aiStatus)}`);
+  }
+  console.log(`✓ Ollama AI Status: Connected=${aiStatus.data.connected}, ActiveModel=${aiStatus.data.activeModel}, Version=${aiStatus.data.version}`);
+
+  const aiChatRes = await apiCall('/ai/chat', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${officerToken}`
+    },
+    body: JSON.stringify({
+      messages: [{ role: 'user', content: 'What is ICAO 9303 MRZ standard?' }]
+    })
+  });
+  if (aiChatRes.status !== 200) {
+    throw new Error(`AI chat failed: ${JSON.stringify(aiChatRes)}`);
+  }
+  console.log(`✓ Ollama Copilot Chat OK (Model: ${aiChatRes.data.model})`);
+
   console.log('\n===========================================================');
-  console.log('  🎉 ALL 7 FULL-STACK API TESTS PASSED WITH 100% SUCCESS!  ');
+  console.log('  🎉 ALL 8 FULL-STACK API TESTS PASSED WITH 100% SUCCESS!  ');
   console.log('===========================================================');
 }
 

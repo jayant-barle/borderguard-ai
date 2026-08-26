@@ -84,7 +84,10 @@ export const DocumentPhotoViewer: React.FC<DocumentPhotoViewerProps> = ({
                     className="w-full h-full object-cover"
                   />
                 ) : (
-                  <UserCheck className="w-8 h-8 text-slate-400" />
+                  <div className="flex flex-col items-center justify-center p-2 text-center text-slate-400 space-y-1">
+                    <UserCheck className="w-7 h-7 text-slate-300" />
+                    <span className="text-[9px] font-semibold text-slate-500">No Prior Photo</span>
+                  </div>
                 )}
               </div>
               <p className="text-[10px] font-bold text-slate-700 uppercase">Central Registry</p>

@@ -9,6 +9,7 @@ import { MRZInspector } from '../components/report/MRZInspector';
 import { TamperingForensicsView } from '../components/report/TamperingForensicsView';
 import { DatabaseStatusCard } from '../components/report/DatabaseStatusCard';
 import { RiskFactorBreakdown } from '../components/report/RiskFactorBreakdown';
+import { AIForensicCopilot } from '../components/report/AIForensicCopilot';
 import {
   FileText,
   Binary,
@@ -174,7 +175,10 @@ export const VerificationReport: React.FC = () => {
       {/* 1. Primary Explainable Risk Score Card */}
       <ExplainableRiskCard risk={result.risk} />
 
-      {/* 2. Optical Specimen & Biometric Comparison Card */}
+      {/* 2. Ollama AI Forensic Copilot & Interactive Assistant */}
+      <AIForensicCopilot result={result} />
+
+      {/* 3. Optical Specimen & Biometric Comparison Card */}
       <DocumentPhotoViewer
         documentImage={result.documentImage}
         faceVerification={result.faceVerification}
@@ -182,7 +186,7 @@ export const VerificationReport: React.FC = () => {
         documentNumber={result.documentNumber}
       />
 
-      {/* 3. Deep-Dive Forensic Inspection Tabs */}
+      {/* 4. Deep-Dive Forensic Inspection Tabs */}
       <div className="space-y-4">
         {/* Tab Navigation Header (Hidden on print) */}
         <div className="flex space-x-2 border-b border-slate-200 overflow-x-auto pb-1 print:hidden">

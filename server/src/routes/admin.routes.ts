@@ -97,7 +97,7 @@ router.put('/users/:id', (req: AuthRequest, res: Response) => {
       req.user!,
       'USER_UPDATED',
       'USER',
-      id,
+      String(id),
       `Updated user ${user.name} — Status: ${is_active !== undefined ? (is_active ? 'Active' : 'Deactivated') : 'Unchanged'}, Role: ${role || user.role}`,
       req.ip || '127.0.0.1'
     );

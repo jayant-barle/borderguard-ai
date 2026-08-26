@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
@@ -5,12 +6,14 @@ import fs from 'fs';
 import { initDatabase } from './db/database';
 import { seedDatabase } from './db/seed';
 import { generateAllSpecimens } from './utils/generateSpecimens';
+import { OllamaService } from './services/OllamaService';
 import authRoutes from './routes/auth.routes';
 import verificationRoutes from './routes/verification.routes';
 import documentsRoutes from './routes/documents.routes';
 import analyticsRoutes from './routes/analytics.routes';
 import adminRoutes from './routes/admin.routes';
 import specimensRoutes from './routes/specimens.routes';
+import aiRoutes from './routes/ai.routes';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -18,9 +21,8 @@ const PORT = process.env.PORT || 5000;
 // Initialize Database & Seed default data
 initDatabase();
 generateAllSpecimens();
-seedDatabase().then(() => {
-  console.log('[SatyaShield] Database initialized and seeded successfully.');
-});
+seedDatabase();
+console.log('[SatyaShield] Database initialized and seeded successfully.');
 
 // Middleware
 app.use(cors());
@@ -46,14 +48,22 @@ app.use('/api/documents', documentsRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/specimens', specimensRoutes);
+app.use('/api/ai', aiRoutes);
 
 // Health check endpoint
-app.get('/api/health', (_req, res) => {
+app.get('/api/health', async (_req, res) => {
+  const ollamaStatus = await OllamaService.checkHealth();
   res.json({
     status: 'HEALTHY',
     service: 'SatyaShield AI Security Engine',
     version: '2.4.0-SIH',
-    mode: 'DEMO_MODE',
+    mode: ollamaStatus.connected ? 'OLLAMA_AI' : 'DEMO_MODE',
+    ollama: {
+      connected: ollamaStatus.connected,
+      baseUrl: ollamaStatus.baseUrl,
+      activeModel: ollamaStatus.activeModel,
+      availableModelsCount: ollamaStatus.availableModels.length
+    },
     timestamp: new Date().toISOString()
   });
 });
@@ -66,10 +76,19 @@ if (fs.existsSync(clientDistDir)) {
   });
 }
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`=======================================================`);
   console.log(`  🛡️  SatyaShield - Enterprise Security Operations     `);
   console.log(`  Server listening on http://localhost:${PORT}        `);
-  console.log(`  SATYASHIELD AI ENGINE: DEMO MODE (SIH Prototype)     `);
+  
+  // Check Ollama connection status
+  const ollama = await OllamaService.checkHealth();
+  if (ollama.connected) {
+    console.log(`  🤖 OLLAMA AI: CONNECTED (${ollama.baseUrl})`);
+    console.log(`  📦 Active Model: ${ollama.activeModel} (Available: ${ollama.availableModels.length} models)`);
+  } else {
+    console.log(`  ⚠️  OLLAMA AI: OFFLINE / CONNECTING (${ollama.baseUrl})`);
+    console.log(`  💡 Running in robust hybrid fallback mode.`);
+  }
   console.log(`=======================================================`);
 });

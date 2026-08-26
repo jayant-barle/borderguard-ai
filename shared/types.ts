@@ -32,7 +32,34 @@ export interface DocumentRecord {
 
 export type RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH';
 export type FinalStatus = 'VERIFIED' | 'SUSPICIOUS' | 'REQUIRES_MANUAL_REVIEW';
-export type AIMode = 'DEMO_MODE' | 'REAL_MODE';
+export type AIMode = 'DEMO_MODE' | 'REAL_MODE' | 'OLLAMA_AI' | 'HYBRID_AI';
+
+export interface OllamaStatus {
+  connected: boolean;
+  baseUrl: string;
+  activeModel: string;
+  availableModels: string[];
+  version?: string;
+  error?: string;
+}
+
+export interface AIChatMessage {
+  id?: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  timestamp?: string;
+}
+
+export interface AIForensicAnalysis {
+  model: string;
+  timestamp: string;
+  executiveSummary: string;
+  threatAssessment: string;
+  anomalyAnalysis: string[];
+  interviewQuestions: string[];
+  recommendedProtocol: string;
+  confidenceScore: number;
+}
 
 export interface ImageQualityMetric {
   score: number; // 0-100
@@ -77,6 +104,7 @@ export interface OCRResult {
     expiryDate: OCRField;
   };
   rawText: string;
+  mrzLines?: string[];
 }
 
 export interface MRZChecksum {
@@ -145,6 +173,7 @@ export interface DatabaseVerificationResult {
   recordFound: boolean;
   status: DocumentStatus | 'NOT_FOUND';
   matchedDocument?: DocumentRecord;
+  photoUrl?: string;
   nameMatch: boolean;
   dobMatch: boolean;
   expiryMatch: boolean;
@@ -203,6 +232,8 @@ export interface VerificationResult {
   databaseVerification: DatabaseVerificationResult;
   risk: RiskAssessment;
   processingTimeMs: number;
+  ollamaAnalysis?: AIForensicAnalysis;
+  aiExecutiveSummary?: string;
   notes?: string;
 }
 

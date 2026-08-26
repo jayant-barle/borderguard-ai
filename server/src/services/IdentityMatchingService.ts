@@ -53,6 +53,7 @@ export class IdentityMatchingService {
       recordFound: true,
       status: record.status,
       matchedDocument: record,
+      photoUrl: record.photo_url,
       nameMatch,
       dobMatch,
       expiryMatch,

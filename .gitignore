@@ -4,8 +4,11 @@ client/node_modules/
 
 # Production builds
 dist/
+dist-server/
 client/dist/
 build/
+*.tsbuildinfo
+*.traineddata
 
 # Local databases and runtime state
 data/*.db

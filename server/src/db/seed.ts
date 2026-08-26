@@ -1,10 +1,10 @@
 import bcrypt from 'bcryptjs';
 import { db } from './database';
 
-export async function seedDatabase() {
-  const salt = await bcrypt.genSalt(10);
-  const officerHash = await bcrypt.hash('Officer@123', salt);
-  const adminHash = await bcrypt.hash('Admin@123', salt);
+export function seedDatabase() {
+  const salt = bcrypt.genSaltSync(10);
+  const officerHash = bcrypt.hashSync('Officer@123', salt);
+  const adminHash = bcrypt.hashSync('Admin@123', salt);
 
   const insertUser = db.prepare(`
     INSERT OR IGNORE INTO users (name, email, password_hash, role, is_active, badge_number)

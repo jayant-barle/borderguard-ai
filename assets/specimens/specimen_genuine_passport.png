@@ -114,5 +114,5 @@
   <!-- Machine Readable Zone (MRZ TD3 Format) -->
   <rect x="35" y="415" width="730" height="75" rx="6" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1"/>
   <text x="50" y="445" font-family="Courier, monospace" font-size="16" font-weight="bold" fill="#0f172a" letter-spacing="4">P&lt;INDOVERMA&lt;&lt;ANANYA&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;</text>
-  <text x="50" y="475" font-family="Courier, monospace" font-size="16" font-weight="bold" fill="#0f172a" letter-spacing="4">P948210375IND9406188F3104116&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;06</text>
+  <text x="50" y="475" font-family="Courier, monospace" font-size="16" font-weight="bold" fill="#0f172a" letter-spacing="4">P948210375IND9406188F3104116&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;00</text>
 </svg>

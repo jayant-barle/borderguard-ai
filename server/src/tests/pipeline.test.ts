@@ -50,7 +50,7 @@ async function runPipelineTests() {
   const s1Quality = ImageQualityService.analyze(p1Buffer, s1Scenario.scenario);
   console.log(`[ImageQualityService] Score: ${s1Quality.overallScore} (${s1Quality.status})`);
 
-  const s1Ocr = OCRService.extractFields(p1Buffer, s1Scenario.scenario);
+  const s1Ocr = await OCRService.extractFields(p1Buffer, s1Scenario.scenario);
   console.log(`[OCRService] Extracted Holder: ${s1Ocr.fields.fullName.value} | Doc#: ${s1Ocr.fields.documentNumber.value}`);
   if (s1Ocr.fields.documentNumber.value !== 'P94821037') {
     throw new Error('Test 1 Failed: Document number mismatch');
@@ -68,7 +68,7 @@ async function runPipelineTests() {
     throw new Error('Test 1 Failed: False tampering detected on genuine document');
   }
 
-  const s1Face = FaceVerificationService.verify(p1Buffer, s1Scenario.scenario);
+  const s1Face = await FaceVerificationService.verify(p1Buffer, s1Scenario.scenario);
   console.log(`[FaceVerificationService] Consistency: ${s1Face.consistency} (${s1Face.similarityScore}%)`);
   if (s1Face.consistency !== 'LIKELY_MATCH' || s1Face.similarityScore < 85) {
     throw new Error('Test 1 Failed: Face verification match failed on genuine passport');
@@ -108,10 +108,10 @@ async function runPipelineTests() {
   }
 
   const s2Quality = ImageQualityService.analyze(p2Buffer, s2Scenario.scenario);
-  const s2Ocr = OCRService.extractFields(p2Buffer, s2Scenario.scenario);
+  const s2Ocr = await OCRService.extractFields(p2Buffer, s2Scenario.scenario);
   const s2Mrz = MRZValidationService.validate(s2Scenario.scenario, s2Ocr);
   const s2Tampering = TamperingService.analyze(p2Buffer, s2Scenario.scenario);
-  const s2Face = FaceVerificationService.verify(p2Buffer, s2Scenario.scenario);
+  const s2Face = await FaceVerificationService.verify(p2Buffer, s2Scenario.scenario);
   const s2Db = IdentityMatchingService.verifyInDatabase(
     s2Ocr.fields.documentNumber.value,
     s2Ocr.fields.fullName.value,
@@ -172,22 +172,11 @@ async function runPipelineTests() {
   console.log('\n===========================================================');
   console.log('  🎉 ALL AUTOMATED PIPELINE TESTS PASSED SUCCESSFULLY!    ');
   console.log('===========================================================');
-
-  // Close database cleanly
-  try {
-    db.close();
-  } catch (e) {
-    // Ignore if already closed
-  }
+  process.exit(0);
 }
 
-runPipelineTests().then(() => {
-  process.exit(0);
-}).catch((err) => {
+runPipelineTests().catch((err) => {
   console.error('\n❌ PIPELINE TEST FAILED:', err);
-  try {
-    db.close();
-  } catch (e) {}
   process.exit(1);
 });
 
