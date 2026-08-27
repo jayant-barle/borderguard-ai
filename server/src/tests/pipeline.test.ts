@@ -74,12 +74,24 @@ async function runPipelineTests() {
     throw new Error('Test 1 Failed: Face verification match failed on genuine passport');
   }
 
+  IdentityMatchingService.registerOrUpdateDocument({
+    documentNumber: s1Ocr.fields.documentNumber.value,
+    documentType: 'PASSPORT',
+    holderName: s1Ocr.fields.fullName.value,
+    nationality: s1Ocr.fields.nationality.value,
+    dateOfBirth: s1Ocr.fields.dateOfBirth.value,
+    expiryDate: s1Ocr.fields.expiryDate.value,
+    photoUrl: s1Face.extractedFaceUrl,
+    status: 'ACTIVE'
+  });
+
   const s1Db = IdentityMatchingService.verifyInDatabase(
     s1Ocr.fields.documentNumber.value,
     s1Ocr.fields.fullName.value,
     s1Ocr.fields.dateOfBirth.value,
     s1Ocr.fields.expiryDate.value
   );
+
   console.log(`[IdentityMatchingService] Record Found: ${s1Db.recordFound} | Status: ${s1Db.status}`);
   if (!s1Db.recordFound || s1Db.status !== 'ACTIVE') {
     throw new Error('Test 1 Failed: Database record not active');

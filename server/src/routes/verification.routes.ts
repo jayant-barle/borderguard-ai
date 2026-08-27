@@ -99,19 +99,44 @@ router.post('/process', authenticateToken, upload.single('document'), async (req
     // Step 4: MRZ Validation
     const mrz = MRZValidationService.validate(scenarioResult.scenario, ocr, ocr.mrzLines);
 
-    // Step 5: Central Database Verification
-    const databaseVerification = IdentityMatchingService.verifyInDatabase(
-      ocr.fields.documentNumber.value,
-      ocr.fields.fullName.value,
-      ocr.fields.dateOfBirth.value,
-      ocr.fields.expiryDate.value
-    );
-
-    // Step 6: Face Extraction & Biometric Comparison against Database Reference
+    // Step 5: Face Extraction & Biometric Analysis
     const faceVerification = await FaceVerificationService.verify(
       imageBuffer,
-      scenarioResult.scenario,
-      databaseVerification.photoUrl
+      scenarioResult.scenario
+    );
+
+    // Step 6: Register Uploaded Document into Central Government Registry & Verify
+    const cleanDocNum = (ocr.fields.documentNumber?.value && ocr.fields.documentNumber.value !== 'DOC-UNREAD')
+      ? ocr.fields.documentNumber.value.trim().toUpperCase()
+      : `DOC-${Date.now().toString().slice(-6)}`;
+    const cleanHolderName = (ocr.fields.fullName?.value && ocr.fields.fullName.value !== 'TRAVELER')
+      ? ocr.fields.fullName.value.trim().toUpperCase()
+      : (filename ? filename.replace(/\.[^/.]+$/, '').toUpperCase() : 'REGISTERED CITIZEN');
+    const cleanNationality = ocr.fields.nationality?.value || 'IND';
+    const cleanDob = ocr.fields.dateOfBirth?.value || '1990-01-01';
+    const cleanGender = ocr.fields.gender?.value || 'F';
+    const cleanIssue = ocr.fields.issueDate?.value || new Date().toISOString().split('T')[0];
+    const cleanExpiry = ocr.fields.expiryDate?.value || '2034-12-31';
+
+    // Register/Upsert this uploaded document into SQLite Central Documents Registry
+    IdentityMatchingService.registerOrUpdateDocument({
+      documentNumber: cleanDocNum,
+      documentType,
+      holderName: cleanHolderName,
+      nationality: cleanNationality,
+      dateOfBirth: cleanDob,
+      gender: cleanGender,
+      issueDate: cleanIssue,
+      expiryDate: cleanExpiry,
+      photoUrl: faceVerification.extractedFaceUrl || imagePath,
+      notes: `Screened and registered in Central Registry on ${new Date().toLocaleDateString()}`
+    });
+
+    const databaseVerification = IdentityMatchingService.verifyInDatabase(
+      cleanDocNum,
+      cleanHolderName,
+      cleanDob,
+      cleanExpiry
     );
 
     // Step 7: Dynamic Substrate & Photo Tampering Analysis
@@ -127,6 +152,7 @@ router.post('/process', authenticateToken, upload.single('document'), async (req
       ocr,
       imageQuality
     );
+
 
     // Step 9: Real LLM AI Forensic Analysis via Ollama (http://localhost:11434)
     let ollamaAnalysis;

@@ -45,25 +45,50 @@ export const DatabaseStatusCard: React.FC<DatabaseStatusCardProps> = ({ dbResult
       </div>
 
       {dbResult.matchedDocument && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs bg-slate-50 p-3.5 rounded-xl border border-slate-200/70">
-          <div>
-            <span className="text-[10px] text-slate-500 font-semibold uppercase">Registered Name</span>
-            <p className="font-bold text-slate-900">{dbResult.matchedDocument.holder_name}</p>
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs bg-slate-50 p-3.5 rounded-xl border border-slate-200/70">
+            <div>
+              <span className="text-[10px] text-slate-500 font-semibold uppercase">Registered Name</span>
+              <p className="font-bold text-slate-900 truncate">{dbResult.matchedDocument.holder_name}</p>
+            </div>
+            <div>
+              <span className="text-[10px] text-slate-500 font-semibold uppercase">Document Number</span>
+              <p className="font-bold text-blue-700 font-mono">{dbResult.matchedDocument.document_number}</p>
+            </div>
+            <div>
+              <span className="text-[10px] text-slate-500 font-semibold uppercase">Nationality / State</span>
+              <p className="font-bold text-slate-900">{dbResult.matchedDocument.nationality}</p>
+            </div>
+            <div>
+              <span className="text-[10px] text-slate-500 font-semibold uppercase">Registered Expiry</span>
+              <p className="font-bold text-slate-900 font-mono">{dbResult.matchedDocument.expiry_date}</p>
+            </div>
+            <div>
+              <span className="text-[10px] text-slate-500 font-semibold uppercase">Date of Birth</span>
+              <p className="font-bold text-slate-900 font-mono">{dbResult.matchedDocument.date_of_birth || 'N/A'}</p>
+            </div>
+            <div>
+              <span className="text-[10px] text-slate-500 font-semibold uppercase">Gender</span>
+              <p className="font-bold text-slate-900">{dbResult.matchedDocument.gender || 'F'}</p>
+            </div>
+            <div>
+              <span className="text-[10px] text-slate-500 font-semibold uppercase">Issue Date</span>
+              <p className="font-bold text-slate-900 font-mono">{dbResult.matchedDocument.issue_date || 'N/A'}</p>
+            </div>
+            <div>
+              <span className="text-[10px] text-slate-500 font-semibold uppercase">Registry Record</span>
+              <p className="font-bold text-emerald-700 font-mono">ID #{dbResult.matchedDocument.id}</p>
+            </div>
           </div>
-          <div>
-            <span className="text-[10px] text-slate-500 font-semibold uppercase">Document Number</span>
-            <p className="font-bold text-slate-900 font-mono">{dbResult.matchedDocument.document_number}</p>
-          </div>
-          <div>
-            <span className="text-[10px] text-slate-500 font-semibold uppercase">Nationality / State</span>
-            <p className="font-bold text-slate-900">{dbResult.matchedDocument.nationality}</p>
-          </div>
-          <div>
-            <span className="text-[10px] text-slate-500 font-semibold uppercase">Registered Expiry</span>
-            <p className="font-bold text-slate-900 font-mono">{dbResult.matchedDocument.expiry_date}</p>
-          </div>
+          {dbResult.matchedDocument.notes && (
+            <div className="text-[11px] text-slate-500 bg-slate-50/70 px-3 py-2 rounded-lg border border-slate-200/50">
+              <span className="font-semibold text-slate-700">Registry Note: </span>
+              {dbResult.matchedDocument.notes}
+            </div>
+          )}
         </div>
       )}
     </div>
   );
 };
+

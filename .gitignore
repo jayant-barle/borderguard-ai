@@ -41,3 +41,8 @@ Thumbs.db
 *.ntvs*
 *.njsproj
 *.sln
+
+# GSD Session State
+.gsd/STATE.md
+.gsd/JOURNAL.md
+.gsd/TODO.md

@@ -29,98 +29,14 @@ export function seedDatabase() {
     `).run();
   }
 
-  // 3. Seed Mock Document Registry
-  const docCount = db.prepare('SELECT COUNT(*) as count FROM documents').get() as { count: number };
-  if (docCount.count === 0) {
-    const insertDoc = db.prepare(`
-      INSERT INTO documents (document_number, document_type, holder_name, nationality, date_of_birth, gender, issue_date, expiry_date, status, photo_url, notes)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
-    // Scenario 1 & 2 Identity in central database (Genuine traveler)
-    insertDoc.run(
-      'P94821037',
-      'PASSPORT',
-      'ANANYA VERMA',
-      'IND',
-      '1994-06-18',
-      'F',
-      '2021-04-12',
-      '2031-04-11',
-      'ACTIVE',
-      '/assets/specimens/reference_ananya_verma.png',
-      'Registered biometric passport profile. Standard verification history.'
-    );
-
-    insertDoc.run(
-      'M39281745',
-      'PASSPORT',
-      'ROHIT SHARMA',
-      'IND',
-      '1988-11-23',
-      'M',
-      '2018-02-10',
-      '2028-02-09',
-      'SUSPENDED',
-      '/assets/specimens/reference_rohit_sharma.png',
-      'Passport flagged as suspended due to administrative review request.'
-    );
-
-    insertDoc.run(
-      'K88492011',
-      'PASSPORT',
-      'DAVID MIKKELSON',
-      'GBR',
-      '1982-03-14',
-      'M',
-      '2019-09-01',
-      '2029-08-31',
-      'BLACKLISTED',
-      '/assets/specimens/reference_david_m.png',
-      'Interpol Red Notice Ref #29402 - Do not clear without immigration supervisor.'
-    );
-
-    insertDoc.run(
-      'Z47291055',
-      'PASSPORT',
-      'PRIYA PATEL',
-      'IND',
-      '1991-08-30',
-      'F',
-      '2013-05-15',
-      '2023-05-14',
-      'EXPIRED',
-      '/assets/specimens/reference_priya_p.png',
-      'Expired passport. Requires valid renewal or valid visa endorsement.'
-    );
-
-    insertDoc.run(
-      'R67129481',
-      'PASSPORT',
-      'ELENA ROSTOVA',
-      'RUS',
-      '1996-12-05',
-      'F',
-      '2022-01-10',
-      '2032-01-09',
-      'ACTIVE',
-      '/assets/specimens/reference_elena_r.png',
-      'Frequent business traveler. Verified e-Visa on file.'
-    );
-
-    insertDoc.run(
-      'E55192837',
-      'PASSPORT',
-      'ALEXANDER CHEN',
-      'SGP',
-      '1985-07-22',
-      'M',
-      '2020-10-18',
-      '2030-10-17',
-      'ACTIVE',
-      '/assets/specimens/reference_alex_c.png',
-      'APEC Business Travel Card holder.'
-    );
+  // 3. Clean up any previous hardcoded mock documents from the central registry
+  try {
+    db.prepare(`
+      DELETE FROM documents 
+      WHERE document_number IN ('P94821037', 'M39281745', 'K88492011', 'Z47291055', 'R67129481', 'E55192837')
+    `).run();
+  } catch (err: any) {
+    console.warn('Document cleanup note:', err.message);
   }
 
   // 4. Seed Audit Logs
