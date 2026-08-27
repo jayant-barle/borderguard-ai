@@ -4,9 +4,7 @@ import {
   Sparkles,
   Send,
   HelpCircle,
-  ShieldAlert,
   ShieldCheck,
-  FileCheck,
   AlertTriangle,
   RefreshCw,
   Copy,
@@ -14,7 +12,6 @@ import {
   ChevronDown,
   ChevronUp,
   Cpu,
-  CornerDownLeft,
   User
 } from 'lucide-react';
 import { VerificationResult, AIChatMessage, AIForensicAnalysis, OllamaStatus } from '../../../../shared/types';
@@ -54,9 +51,9 @@ export const AIForensicCopilot: React.FC<AIForensicCopilotProps> = ({ result }) 
     checkOllama();
   }, []);
 
-  // Initialize initial greeting or load existing analysis
+  // Initialize initial greeting or load existing analysis when dossier changes
   useEffect(() => {
-    if (result && messages.length === 0) {
+    if (result) {
       const isHighRisk = result.risk.level === 'HIGH' || result.tampering?.detected;
       const initialAssistantMessage: AIChatMessage = {
         role: 'assistant',
@@ -73,8 +70,9 @@ export const AIForensicCopilot: React.FC<AIForensicCopilotProps> = ({ result }) 
         timestamp: new Date().toISOString()
       };
       setMessages([initialAssistantMessage]);
+      setAnalysis(result.ollamaAnalysis || null);
     }
-  }, [result]);
+  }, [result.id]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });

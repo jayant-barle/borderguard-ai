@@ -42,6 +42,11 @@ Thumbs.db
 *.njsproj
 *.sln
 
+# Python cache & artifacts
+__pycache__/
+*.pyc
+rectified_output.png
+
 # GSD Session State
 .gsd/STATE.md
 .gsd/JOURNAL.md

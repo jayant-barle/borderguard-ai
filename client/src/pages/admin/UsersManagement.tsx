@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { User, UserRole } from '../../../../shared/types';
 import { api } from '../../services/api';
-import { Users, UserPlus, Shield, CheckCircle2, XCircle, RefreshCw, Key, Mail } from 'lucide-react';
+import { Users, UserPlus, Shield, CheckCircle2, XCircle, RefreshCw, Key } from 'lucide-react';
 
 export const UsersManagement: React.FC = () => {
   const [users, setUsers] = useState<User[]>([]);
@@ -14,7 +14,7 @@ export const UsersManagement: React.FC = () => {
   const [badgeNumber, setBadgeNumber] = useState<string>('');
   const [actionError, setActionError] = useState<string | null>(null);
 
-  const loadUsers = async () => {
+  const loadUsers = useCallback(async () => {
     setLoading(true);
     try {
       const data = await api.admin.getUsers();
@@ -24,11 +24,11 @@ export const UsersManagement: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     loadUsers();
-  }, []);
+  }, [loadUsers]);
 
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();

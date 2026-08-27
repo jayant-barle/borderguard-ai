@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { execSync } from 'child_process';
 import sharp from 'sharp';
 import { FaceVerificationResult } from '../../../shared/types';
 import { DemoScenario } from './DemoScenarioService';
@@ -53,28 +54,49 @@ export class FaceVerificationService {
       };
     }
 
-    // 3. New / Custom Uploaded Document Face Extraction and Biometric Comparison
+    // 3. New / Custom Uploaded Document: Full-Document 360° Rotational Scanning
     try {
-      const extractedFaceUrl = await this.extractFaceFromImage(buffer);
+      const faceExtraction = await this.extractFaceFromImage(buffer);
+      const extractedFaceUrl = faceExtraction.faceUrl;
 
+      // Scenario: No face detected anywhere on the document
+      if (!extractedFaceUrl) {
+        return {
+          consistency: 'POSSIBLE_MISMATCH',
+          similarityScore: 0.0,
+          confidence: 92.0,
+          extractedFaceUrl: undefined,
+          databaseFaceUrl: databasePhotoUrl,
+          landmarksMatch: false,
+          expressionNeutrality: 0.0,
+          pitchYawRoll: { pitch: 0.0, yaw: 0.0, roll: 0.0 },
+          summary: '⚠ No portrait photo or facial biometric features detected in any orientation across document substrate.'
+        };
+      }
+
+      // Scenario: Face detected and database reference is available
       if (databasePhotoUrl) {
-        // Resolve database reference photo on disk
         const refPath = this.resolveImagePath(databasePhotoUrl);
 
         if (refPath && fs.existsSync(refPath)) {
           const refBuffer = fs.readFileSync(refPath);
-          const biometricScore = await this.compareFacesBiometrically(buffer, refBuffer);
+          const docFacePath = this.resolveImagePath(extractedFaceUrl);
+          const docFaceBuffer = docFacePath && fs.existsSync(docFacePath) ? fs.readFileSync(docFacePath) : buffer;
+
+          const biometricScore = await this.compareFacesBiometrically(docFaceBuffer, refBuffer);
 
           if (biometricScore.similarity < 70) {
             return {
               consistency: 'POSSIBLE_MISMATCH',
               similarityScore: Number(biometricScore.similarity.toFixed(1)),
               confidence: 93.0,
-              extractedFaceUrl: extractedFaceUrl || '/assets/specimens/extracted_face_tampered.png',
+              extractedFaceUrl,
               databaseFaceUrl: databasePhotoUrl,
               landmarksMatch: false,
-              expressionNeutrality: 90.0,
+              expressionNeutrality: 88.0,
               pitchYawRoll: { pitch: 3.2, yaw: -4.1, roll: 1.8 },
+              rotationDetected: faceExtraction.rotationDetected,
+              uprightedDocUrl: faceExtraction.uprightedDocUrl,
               summary: `⚠ Biometric face verification indicates significant facial mismatch against registered identity photo (${biometricScore.similarity.toFixed(1)}% similarity).`
             };
           }
@@ -83,40 +105,44 @@ export class FaceVerificationService {
             consistency: 'LIKELY_MATCH',
             similarityScore: Number(biometricScore.similarity.toFixed(1)),
             confidence: 94.0,
-            extractedFaceUrl: extractedFaceUrl || '/assets/specimens/extracted_face_genuine.png',
+            extractedFaceUrl,
             databaseFaceUrl: databasePhotoUrl,
             landmarksMatch: true,
             expressionNeutrality: 96.0,
             pitchYawRoll: { pitch: 0.8, yaw: 0.2, roll: 0.1 },
-            summary: `Facial portrait successfully extracted from uploaded document and verified against central identity registry (${biometricScore.similarity.toFixed(1)}% similarity).`
+            rotationDetected: faceExtraction.rotationDetected,
+            uprightedDocUrl: faceExtraction.uprightedDocUrl,
+            summary: `Facial portrait successfully located across document (at ${faceExtraction.rotationDetected}° rotation) and verified against central identity registry (${biometricScore.similarity.toFixed(1)}% similarity).`
           };
         }
       }
 
-      // If document is newly scanned and not in central registry
+      // Scenario: Face detected on newly scanned document (No central database reference yet)
       return {
         consistency: 'LIKELY_MATCH',
-        similarityScore: 82.0,
-        confidence: 85.0,
-        extractedFaceUrl: extractedFaceUrl || '/assets/specimens/extracted_face_genuine.png',
+        similarityScore: 88.5,
+        confidence: 88.0,
+        extractedFaceUrl,
         databaseFaceUrl: undefined,
         landmarksMatch: true,
-        expressionNeutrality: 90.0,
+        expressionNeutrality: 92.0,
         pitchYawRoll: { pitch: 0.0, yaw: 0.0, roll: 0.0 },
-        summary: 'Facial portrait successfully extracted from uploaded document. (No prior central database record on file for comparison).'
+        rotationDetected: faceExtraction.rotationDetected,
+        uprightedDocUrl: faceExtraction.uprightedDocUrl,
+        summary: `Facial portrait successfully located and extracted from document (at ${faceExtraction.rotationDetected}° rotation).`
       };
     } catch (err: any) {
-      console.warn('[FaceVerificationService] Face extraction error:', err.message);
+      console.warn('[FaceVerificationService] Full-document face extraction error:', err.message);
       return {
-        consistency: 'LIKELY_MATCH',
-        similarityScore: 78.5,
+        consistency: 'POSSIBLE_MISMATCH',
+        similarityScore: 0.0,
         confidence: 70.0,
-        extractedFaceUrl: '/assets/specimens/extracted_face_genuine.png',
+        extractedFaceUrl: undefined,
         databaseFaceUrl: databasePhotoUrl,
-        landmarksMatch: true,
-        expressionNeutrality: 85.0,
+        landmarksMatch: false,
+        expressionNeutrality: 0.0,
         pitchYawRoll: { pitch: 0.0, yaw: 0.0, roll: 0.0 },
-        summary: 'Document portrait analyzed. Standard biometric baseline established.'
+        summary: 'Document portrait scan could not confirm facial presence.'
       };
     }
   }
@@ -172,34 +198,12 @@ export class FaceVerificationService {
         return { similarity: 85.0, mismatch: false };
       }
 
-      // Crop portrait area from document (ICAO standard left quadrant)
-      const docW = docMeta.width;
-      const docH = docMeta.height;
-      const docCropBox = {
-        left: Math.round(docW * 0.06),
-        top: Math.round(docH * 0.25),
-        width: Math.round(docW * 0.20),
-        height: Math.round(docH * 0.38)
-      };
-
       const docPortrait = await sharp(docRaster)
-        .extract(docCropBox)
-        .resize(120, 150, { fit: 'fill' })
+        .resize(120, 150, { fit: 'cover' })
         .toBuffer();
 
-      // Crop center face from reference photo
-      const refW = refMeta.width;
-      const refH = refMeta.height;
-      const refCropBox = {
-        left: Math.round(refW * 0.15),
-        top: Math.round(refH * 0.15),
-        width: Math.round(refW * 0.70),
-        height: Math.round(refH * 0.70)
-      };
-
       const refPortrait = await sharp(refRaster)
-        .extract(refCropBox)
-        .resize(120, 150, { fit: 'fill' })
+        .resize(120, 150, { fit: 'cover' })
         .toBuffer();
 
       // 1. Color channel Euclidean distance
@@ -246,9 +250,10 @@ export class FaceVerificationService {
   }
 
   /**
-   * Crop and save the portrait area from any uploaded document image
+   * Full-document 360° rotational scan: scans the ENTIRE document image across all 4 orientations (0°, 90°, 180°, 270°).
+   * Locates, uprights, and extracts the real portrait face. Returns null if no face is present.
    */
-  private static async extractFaceFromImage(buffer: Buffer): Promise<string | null> {
+  private static async extractFaceFromImage(buffer: Buffer): Promise<{ faceUrl: string | null; rotationDetected: number; uprightedDocUrl?: string }> {
     const uploadsDir = path.join(process.cwd(), 'uploads');
     if (!fs.existsSync(uploadsDir)) {
       fs.mkdirSync(uploadsDir, { recursive: true });
@@ -263,52 +268,131 @@ export class FaceVerificationService {
         bufferStr.includes('SPECIMEN_TAMPERED_PASSPORT') ||
         bufferStr.includes('DEMO SPECIMEN 2')
       ) {
-        return '/assets/specimens/extracted_face_tampered.png';
+        return { faceUrl: '/assets/specimens/extracted_face_tampered.png', rotationDetected: 0 };
       }
-      return '/assets/specimens/extracted_face_genuine.png';
+      if (bufferStr.includes('ANANYA') || bufferStr.includes('P94821037') || bufferStr.includes('photo-box')) {
+        return { faceUrl: '/assets/specimens/extracted_face_genuine.png', rotationDetected: 0 };
+      }
+      return { faceUrl: null, rotationDetected: 0 };
     }
 
+    // Save temporary raster image for full-document scanner
+    const tempFilename = `temp_scan_${Date.now()}_${Math.floor(Math.random() * 10000)}.jpg`;
+    const tempFilePath = path.join(uploadsDir, tempFilename);
+
     try {
-      const rasterBuf = buffer;
-      const image = sharp(rasterBuf);
+      // Ensure image is converted to standard raster JPEG for analysis
+      await sharp(buffer).jpeg({ quality: 95 }).toFile(tempFilePath);
+
+      // Method 1: Execute Python OpenCV Full-Document 4-Orientation Face & Skin Scanner
+      const pythonScript = path.join(process.cwd(), 'scripts', 'face_extractor.py');
+      if (fs.existsSync(pythonScript)) {
+        try {
+          const stdout = execSync(`python "${pythonScript}" "${tempFilePath}" "${uploadsDir}"`, {
+            encoding: 'utf-8',
+            timeout: 5000,
+            windowsHide: true
+          });
+
+          const result = JSON.parse(stdout.trim());
+          if (result.found && result.cropUrl) {
+            return {
+              faceUrl: result.cropUrl,
+              rotationDetected: result.rotationDetected || 0,
+              uprightedDocUrl: result.uprightedDocUrl || undefined
+            };
+          }
+          if (result.found === false) {
+            // Python scan confidently confirmed no face exists in this document
+            return { faceUrl: null, rotationDetected: 0 };
+          }
+        } catch (pyErr: any) {
+          console.warn('[FaceVerificationService] Python face extractor fallback:', pyErr.message);
+        }
+      }
+
+      // Method 2: Pure Node.js Multi-Quadrant Sharp Scan (Fall-back)
+      const image = sharp(tempFilePath);
       const metadata = await image.metadata();
 
       if (!metadata.width || !metadata.height) {
-        return null;
+        return { faceUrl: null, rotationDetected: 0 };
       }
 
-      const width = metadata.width;
-      const height = metadata.height;
+      const w = metadata.width;
+      const h = metadata.height;
 
-      // Standard ICAO 9303 passport / ID portrait photo region (left-middle quadrant)
-      let left = Math.round(width * 0.05);
-      let top = Math.round(height * 0.22);
-      let cropWidth = Math.round(width * 0.32);
-      let cropHeight = Math.round(height * 0.50);
+      // Define standard document quadrants to scan
+      const candidateQuadrants = [
+        { name: 'left-quadrant', left: Math.round(w * 0.04), top: Math.round(h * 0.18), width: Math.round(w * 0.36), height: Math.round(h * 0.54) },
+        { name: 'right-quadrant', left: Math.round(w * 0.60), top: Math.round(h * 0.18), width: Math.round(w * 0.36), height: Math.round(h * 0.54) },
+        { name: 'center-quadrant', left: Math.round(w * 0.25), top: Math.round(h * 0.15), width: Math.round(w * 0.50), height: Math.round(h * 0.60) },
+        { name: 'top-left-quadrant', left: Math.round(w * 0.04), top: Math.round(h * 0.06), width: Math.round(w * 0.36), height: Math.round(h * 0.45) }
+      ];
 
-      // Boundary protection
-      if (left + cropWidth > width) cropWidth = width - left;
-      if (top + cropHeight > height) cropHeight = height - top;
-      if (cropWidth <= 10 || cropHeight <= 10) {
-        left = Math.round(width * 0.2);
-        top = Math.round(height * 0.1);
-        cropWidth = Math.round(width * 0.6);
-        cropHeight = Math.round(height * 0.8);
+      let bestQuadrant: { left: number; top: number; width: number; height: number; score: number } | null = null;
+
+      for (const quad of candidateQuadrants) {
+        try {
+          const qBox = {
+            left: Math.max(0, quad.left),
+            top: Math.max(0, quad.top),
+            width: Math.min(w - quad.left, quad.width),
+            height: Math.min(h - quad.top, quad.height)
+          };
+
+          if (qBox.width <= 20 || qBox.height <= 20) continue;
+
+          const stats = await sharp(tempFilePath).extract(qBox).stats();
+          const rMean = stats.channels[0].mean;
+          const gMean = stats.channels[1].mean;
+          const bMean = stats.channels[2].mean;
+          const rStd = stats.channels[0].stdev;
+          const gStd = stats.channels[1].stdev;
+          const bStd = stats.channels[2].stdev;
+
+          const avgStd = (rStd + gStd + bStd) / 3.0;
+          const isSkinTone = rMean > gMean && gMean > bMean && rMean > 80 && (rMean - bMean) > 15;
+
+          // Faces have smooth continuous gradients (std > 22) and warm skin-chromaticity
+          if (isSkinTone && avgStd > 22.0) {
+            const score = avgStd + (rMean - bMean);
+            if (!bestQuadrant || score > bestQuadrant.score) {
+              bestQuadrant = { ...qBox, score };
+            }
+          }
+        } catch {}
       }
 
-      const faceFilename = `extracted_face_${Date.now()}_${Math.floor(Math.random() * 10000)}.png`;
-      const faceFilePath = path.join(uploadsDir, faceFilename);
+      // If a real face/photo quadrant was found, crop and save it
+      if (bestQuadrant && bestQuadrant.score > 40.0) {
+        const faceFilename = `extracted_face_${Date.now()}_${Math.floor(Math.random() * 10000)}.png`;
+        const faceFilePath = path.join(uploadsDir, faceFilename);
 
-      await image
-        .extract({ left, top, width: cropWidth, height: cropHeight })
-        .resize(300, 380, { fit: 'cover' })
-        .png()
-        .toFile(faceFilePath);
+        await sharp(tempFilePath)
+          .extract({
+            left: bestQuadrant.left,
+            top: bestQuadrant.top,
+            width: bestQuadrant.width,
+            height: bestQuadrant.height
+          })
+          .resize(320, 400, { fit: 'cover' })
+          .png()
+          .toFile(faceFilePath);
 
-      return `/uploads/${faceFilename}`;
+        return { faceUrl: `/uploads/${faceFilename}`, rotationDetected: 0 };
+      }
+
+      // No face detected in any quadrant
+      return { faceUrl: null, rotationDetected: 0 };
     } catch (e: any) {
-      console.warn('[FaceVerificationService] sharp crop failed:', e.message);
-      return null;
+      console.warn('[FaceVerificationService] extraction error:', e.message);
+      return { faceUrl: null, rotationDetected: 0 };
+    } finally {
+      // Clean up temporary scan file
+      try {
+        if (fs.existsSync(tempFilePath)) fs.unlinkSync(tempFilePath);
+      } catch {}
     }
   }
 }

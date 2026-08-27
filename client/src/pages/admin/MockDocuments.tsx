@@ -1,8 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { DocumentRecord, DocumentStatus, DocumentType } from '../../../../shared/types';
+import React, { useState, useEffect, useCallback } from 'react';
+import { DocumentRecord, DocumentStatus } from '../../../../shared/types';
 import { api } from '../../services/api';
-import { DocumentStatusBadge } from '../../components/ui/Badge';
-import { FileText, PlusCircle, Search, RefreshCw, Trash2, Edit2, ShieldAlert } from 'lucide-react';
+import { FileText, PlusCircle, Search, RefreshCw, Trash2 } from 'lucide-react';
 
 export const MockDocuments: React.FC = () => {
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
@@ -22,7 +21,7 @@ export const MockDocuments: React.FC = () => {
   const [notes, setNotes] = useState<string>('');
   const [actionError, setActionError] = useState<string | null>(null);
 
-  const loadDocuments = async () => {
+  const loadDocuments = useCallback(async () => {
     setLoading(true);
     try {
       const data = await api.documents.list({
@@ -35,11 +34,11 @@ export const MockDocuments: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [search, statusFilter]);
 
   useEffect(() => {
     loadDocuments();
-  }, [statusFilter]);
+  }, [loadDocuments]);
 
   const handleAddDocument = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -1,39 +1,35 @@
-import { spawn } from 'child_process';
+import { spawn, execSync } from 'child_process';
 
 console.log('🚀 Starting BorderGuard AI (SatyaShield) full-stack environment...\n');
 
-// 1. Build server TypeScript files
+// 1. Compile server TypeScript
 console.log('📦 Compiling TypeScript server...');
-const tsc = spawn('npx', ['tsc'], { stdio: 'inherit', shell: true });
-
-tsc.on('close', (code) => {
-  if (code !== 0) {
-    console.error('❌ TypeScript compilation failed with code', code);
-    process.exit(code || 1);
-  }
-
+try {
+  execSync('npx tsc', { stdio: 'inherit' });
   console.log('✓ Server compilation complete.\n');
+} catch (e) {
+  console.error('❌ TypeScript compilation failed.');
+  process.exit(1);
+}
 
-  // 2. Start backend server
-  const server = spawn(process.execPath, ['dist-server/server/src/index.js'], {
-    stdio: 'inherit'
-  });
-
-  // 3. Start frontend Vite dev server
-  const client = spawn('npm', ['run', '--prefix', 'client', 'dev'], {
-    stdio: 'inherit',
-    shell: true
-  });
-
-  const cleanup = () => {
-    try {
-      server.kill();
-      client.kill();
-    } catch {}
-    process.exit(0);
-  };
-
-  process.on('SIGINT', cleanup);
-  process.on('SIGTERM', cleanup);
-  process.on('exit', cleanup);
+// 2. Start Backend Server
+const server = spawn(process.execPath, ['dist-server/server/src/index.js'], {
+  stdio: 'inherit'
 });
+
+// 3. Start Frontend Client Dev Server
+const client = spawn('npm', ['run', '--prefix', 'client', 'dev'], {
+  stdio: 'inherit',
+  shell: true
+});
+
+const handleExit = () => {
+  try {
+    if (server && !server.killed) server.kill();
+    if (client && !client.killed) client.kill();
+  } catch {}
+  process.exit(0);
+};
+
+process.on('SIGINT', handleExit);
+process.on('SIGTERM', handleExit);

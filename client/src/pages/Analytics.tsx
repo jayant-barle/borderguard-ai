@@ -2,14 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   BarChart3,
   TrendingUp,
-  ShieldCheck,
-  ShieldAlert,
-  AlertTriangle,
-  Clock,
-  Layers,
-  ScanFace,
   RefreshCw,
-  Calendar,
   Activity
 } from 'lucide-react';
 import {
@@ -17,14 +10,10 @@ import {
   Area,
   BarChart,
   Bar,
-  PieChart,
-  Pie,
-  Cell,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend,
   ResponsiveContainer
 } from 'recharts';
 import { api } from '../services/api';
@@ -128,29 +117,135 @@ export const Analytics: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Daily Screening Dynamics */}
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
-          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center">
-            <TrendingUp className="w-4 h-4 mr-1.5 text-blue-600" />
-            Verification Volume & Risk Breakdown Over Time
-          </h4>
-          <div className="h-64 w-full">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+            <div className="flex items-center space-x-2">
+              <TrendingUp className="w-4 h-4 text-blue-600" />
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800">
+                Verification Volume & Risk Breakdown Over Time
+              </h4>
+            </div>
+            <div className="flex items-center space-x-3 text-[10px] font-semibold">
+              <span className="flex items-center space-x-1">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" />
+                <span className="text-slate-600">Low</span>
+              </span>
+              <span className="flex items-center space-x-1">
+                <span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block" />
+                <span className="text-slate-600">Med</span>
+              </span>
+              <span className="flex items-center space-x-1">
+                <span className="w-2.5 h-2.5 rounded-full bg-rose-500 inline-block" />
+                <span className="text-slate-600">High</span>
+              </span>
+              <span className="flex items-center space-x-1">
+                <span className="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block" />
+                <span className="text-slate-600">Total</span>
+              </span>
+            </div>
+          </div>
+
+          <div className="h-72 w-full pt-2">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={metrics.dailyTrends} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+              <AreaChart
+                data={metrics.dailyTrends}
+                margin={{ top: 10, right: 12, left: -20, bottom: 0 }}
+              >
                 <defs>
+                  <linearGradient id="anTotal" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.35} />
+                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.0} />
+                  </linearGradient>
                   <linearGradient id="anLow" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.4} />
+                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.45} />
                     <stop offset="95%" stopColor="#10b981" stopOpacity={0.0} />
                   </linearGradient>
+                  <linearGradient id="anMed" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.45} />
+                    <stop offset="95%" stopColor="#f59e0b" stopOpacity={0.0} />
+                  </linearGradient>
                   <linearGradient id="anHigh" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#ef4444" stopOpacity={0.4} />
+                    <stop offset="5%" stopColor="#ef4444" stopOpacity={0.45} />
                     <stop offset="95%" stopColor="#ef4444" stopOpacity={0.0} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#64748b' }} />
-                <YAxis tick={{ fontSize: 10, fill: '#64748b' }} allowDecimals={false} />
-                <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderRadius: '8px', fontSize: '11px', color: '#fff' }} />
-                <Area type="monotone" dataKey="lowRisk" stroke="#10b981" fill="url(#anLow)" name="Low Risk" />
-                <Area type="monotone" dataKey="highRisk" stroke="#ef4444" fill="url(#anHigh)" name="High Risk" />
+                <XAxis
+                  dataKey="displayDate"
+                  tick={{ fontSize: 10, fill: '#64748b', fontWeight: 600 }}
+                  axisLine={{ stroke: '#cbd5e1' }}
+                />
+                <YAxis
+                  tick={{ fontSize: 10, fill: '#64748b' }}
+                  allowDecimals={false}
+                  axisLine={{ stroke: '#cbd5e1' }}
+                />
+                <Tooltip
+                  content={({ active, payload, label }) => {
+                    if (active && payload && payload.length) {
+                      const data = payload[0].payload;
+                      return (
+                        <div className="bg-slate-900 border border-slate-700 text-white rounded-xl p-3 shadow-xl text-xs space-y-1.5 min-w-[170px]">
+                          <div className="font-bold border-b border-slate-700 pb-1 flex justify-between items-center text-slate-300">
+                            <span>{label || data.date}</span>
+                            <span className="text-[10px] font-mono text-blue-400">Total: {data.total}</span>
+                          </div>
+                          <div className="space-y-1 text-[11px]">
+                            <div className="flex justify-between text-emerald-400">
+                              <span>● Verified (Low):</span>
+                              <span className="font-mono font-bold">{data.lowRisk}</span>
+                            </div>
+                            <div className="flex justify-between text-amber-400">
+                              <span>● Suspicious (Med):</span>
+                              <span className="font-mono font-bold">{data.mediumRisk}</span>
+                            </div>
+                            <div className="flex justify-between text-rose-400">
+                              <span>● Flagged (High):</span>
+                              <span className="font-mono font-bold">{data.highRisk}</span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    }
+                    return null;
+                  }}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="total"
+                  stroke="#3b82f6"
+                  strokeWidth={2.5}
+                  fill="url(#anTotal)"
+                  name="Total Screened"
+                  dot={{ r: 3, fill: '#3b82f6', strokeWidth: 1 }}
+                  activeDot={{ r: 5 }}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="lowRisk"
+                  stroke="#10b981"
+                  strokeWidth={2}
+                  fill="url(#anLow)"
+                  name="Low Risk"
+                  dot={{ r: 2.5, fill: '#10b981' }}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="mediumRisk"
+                  stroke="#f59e0b"
+                  strokeWidth={2}
+                  fill="url(#anMed)"
+                  name="Medium Risk"
+                  dot={{ r: 2.5, fill: '#f59e0b' }}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="highRisk"
+                  stroke="#ef4444"
+                  strokeWidth={2}
+                  fill="url(#anHigh)"
+                  name="High Risk"
+                  dot={{ r: 2.5, fill: '#ef4444' }}
+                />
               </AreaChart>
             </ResponsiveContainer>
           </div>
@@ -158,15 +253,18 @@ export const Analytics: React.FC = () => {
 
         {/* Document Type Distribution Bar Chart */}
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
-          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center">
-            <BarChart3 className="w-4 h-4 mr-1.5 text-blue-600" />
-            Document Types Screened Distribution
-          </h4>
-          <div className="h-64 w-full">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center">
+              <BarChart3 className="w-4 h-4 mr-1.5 text-blue-600" />
+              Document Types Screened Distribution
+            </h4>
+            <span className="text-[10px] font-mono text-slate-400">Classified Specimens</span>
+          </div>
+          <div className="h-72 w-full pt-2">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={metrics.documentTypeDistribution} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey="type" tick={{ fontSize: 10, fill: '#64748b' }} />
+                <XAxis dataKey="type" tick={{ fontSize: 10, fill: '#64748b', fontWeight: 600 }} />
                 <YAxis tick={{ fontSize: 10, fill: '#64748b' }} allowDecimals={false} />
                 <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderRadius: '8px', fontSize: '11px', color: '#fff' }} />
                 <Bar dataKey="count" fill="#3b82f6" radius={[6, 6, 0, 0]} name="Screenings Count" />

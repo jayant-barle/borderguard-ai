@@ -167,6 +167,8 @@ export interface FaceVerificationResult {
   expressionNeutrality: number;
   pitchYawRoll: { pitch: number; yaw: number; roll: number };
   summary: string;
+  rotationDetected?: number;
+  uprightedDocUrl?: string;
 }
 
 export interface DatabaseVerificationResult {

@@ -32,9 +32,10 @@ export const VerificationReport: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const [result, setResult] = useState<VerificationResult | null>(
-    (location.state as any)?.result || null
-  );
+  const [result, setResult] = useState<VerificationResult | null>(() => {
+    const stateResult = (location.state as any)?.result;
+    return stateResult && stateResult.id === id ? stateResult : null;
+  });
   const [loading, setLoading] = useState<boolean>(!result);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<
@@ -42,21 +43,45 @@ export const VerificationReport: React.FC = () => {
   >('TAMPERING');
 
   useEffect(() => {
+    let isCancelled = false;
+
     async function loadReport() {
-      if (!result && id) {
-        setLoading(true);
-        try {
-          const data = await api.verification.getById(id);
+      if (!id) return;
+
+      const stateResult = (location.state as any)?.result;
+      if (stateResult && stateResult.id === id) {
+        setResult(stateResult);
+        setLoading(false);
+        setError(null);
+        return;
+      }
+
+      setLoading(true);
+      setError(null);
+
+      try {
+        const data = await api.verification.getById(id);
+        if (!isCancelled) {
           setResult(data);
-        } catch (err: any) {
+        }
+      } catch (err: any) {
+        console.error('Failed to load verification report record:', err);
+        if (!isCancelled) {
           setError('Failed to load verification report record.');
-        } finally {
+        }
+      } finally {
+        if (!isCancelled) {
           setLoading(false);
         }
       }
     }
+
     loadReport();
-  }, [id, result]);
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [id, location.state]);
 
   if (loading) {
     return (
@@ -138,7 +163,21 @@ export const VerificationReport: React.FC = () => {
           <div className="text-left sm:text-right space-y-1 text-xs text-slate-400">
             <div className="flex items-center sm:justify-end space-x-1.5">
               <Clock className="w-3.5 h-3.5 text-slate-500" />
-              <span>{new Date(result.timestamp).toLocaleString()}</span>
+              <span className="font-mono text-slate-200">
+                {(() => {
+                  let str = String(result.timestamp || '').trim();
+                  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/.test(str)) {
+                    str = str.replace(' ', 'T') + 'Z';
+                  } else if (!str.endsWith('Z') && !str.includes('+') && str.includes('T')) {
+                    str = str + 'Z';
+                  }
+                  const d = new Date(str);
+                  return isNaN(d.getTime()) ? result.timestamp : d.toLocaleString(undefined, {
+                    dateStyle: 'medium',
+                    timeStyle: 'medium'
+                  });
+                })()}
+              </span>
             </div>
             <div className="flex items-center sm:justify-end space-x-1.5">
               <UserCheck className="w-3.5 h-3.5 text-blue-400" />
@@ -254,7 +293,13 @@ export const VerificationReport: React.FC = () => {
         {/* Tab Contents */}
         <div>
           {activeTab === 'TAMPERING' && <TamperingForensicsView tampering={result.tampering} />}
-          {activeTab === 'OCR' && <OCRFieldTable ocr={result.ocr} />}
+          {activeTab === 'OCR' && (
+            <OCRFieldTable
+              ocr={result.ocr}
+              mrz={result.mrz}
+              dbResult={result.databaseVerification}
+            />
+          )}
           {activeTab === 'MRZ' && <MRZInspector mrz={result.mrz} />}
           {activeTab === 'DATABASE' && <DatabaseStatusCard dbResult={result.databaseVerification} />}
           {activeTab === 'RISK_ENGINE' && (

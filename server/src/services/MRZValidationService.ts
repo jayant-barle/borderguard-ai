@@ -41,20 +41,21 @@ export class MRZValidationService {
       ? customMRZLines
       : (ocrData.mrzLines && ocrData.mrzLines.length >= 2 ? ocrData.mrzLines : undefined);
 
-    const docNum = (ocrData.fields.documentNumber?.value || 'P94821037').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const isDemo = scenario === 'GENUINE_PASSPORT' || scenario === 'PHOTO_REPLACEMENT';
+    const docNum = (ocrData.fields.documentNumber?.value || (isDemo ? 'P94821037' : 'DOC-000000')).toUpperCase().replace(/[^A-Z0-9]/g, '');
     const country = (ocrData.fields.countryCode?.value || 'IND').toUpperCase().slice(0, 3);
-    const fullName = (ocrData.fields.fullName?.value || 'ANANYA VERMA').toUpperCase();
+    const fullName = (ocrData.fields.fullName?.value || (isDemo ? 'ANANYA VERMA' : 'TRAVELER')).toUpperCase();
     const gender = (ocrData.fields.gender?.value || 'F').toUpperCase().slice(0, 1);
 
     // Format DOB to YYMMDD
-    const rawDob = ocrData.fields.dateOfBirth?.value || '1994-06-18';
+    const rawDob = ocrData.fields.dateOfBirth?.value || (isDemo ? '1994-06-18' : '1990-01-01');
     const dobMatch = rawDob.replace(/-/g, '').slice(-6); // e.g. 940618
-    const dobYYMMDD = dobMatch.length === 6 ? dobMatch : '940618';
+    const dobYYMMDD = dobMatch.length === 6 ? dobMatch : '900101';
 
     // Format Expiry to YYMMDD
-    const rawExp = ocrData.fields.expiryDate?.value || '2031-04-11';
+    const rawExp = ocrData.fields.expiryDate?.value || (isDemo ? '2031-04-11' : '2032-01-01');
     const expMatch = rawExp.replace(/-/g, '').slice(-6); // e.g. 310411
-    const expYYMMDD = expMatch.length === 6 ? expMatch : '310411';
+    const expYYMMDD = expMatch.length === 6 ? expMatch : '320101';
 
     let mrzLines: string[];
     let parsedMRZDocNum = docNum;

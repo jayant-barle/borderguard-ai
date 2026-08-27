@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { AuditLog } from '../../../../shared/types';
 import { api } from '../../services/api';
-import { ScrollText, RefreshCw, Filter, ShieldCheck, UserCheck, Key, ShieldAlert } from 'lucide-react';
+import { ScrollText, RefreshCw, Filter } from 'lucide-react';
 
 export const AuditLogs: React.FC = () => {
   const [logs, setLogs] = useState<AuditLog[]>([]);
@@ -9,7 +9,7 @@ export const AuditLogs: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [actionFilter, setActionFilter] = useState<string>('ALL');
 
-  const loadLogs = async () => {
+  const loadLogs = useCallback(async () => {
     setLoading(true);
     try {
       const res = await api.admin.getAuditLogs({
@@ -23,11 +23,11 @@ export const AuditLogs: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [actionFilter]);
 
   useEffect(() => {
     loadLogs();
-  }, [actionFilter]);
+  }, [loadLogs]);
 
   const getActionBadge = (action: string) => {
     if (action.includes('LOGIN')) {
@@ -118,7 +118,13 @@ export const AuditLogs: React.FC = () => {
                   <tr key={l.id} className="hover:bg-slate-50/80 transition-colors">
                     <td className="py-3 px-4 font-mono font-bold text-slate-700">#{l.id}</td>
                     <td className="py-3 px-4 text-slate-500 whitespace-nowrap">
-                      {new Date(l.createdAt).toLocaleString()}
+                      {(() => {
+                        let s = String(l.createdAt || '').trim();
+                        if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/.test(s)) s = s.replace(' ', 'T') + 'Z';
+                        else if (!s.endsWith('Z') && !s.includes('+') && s.includes('T')) s = s + 'Z';
+                        const d = new Date(s);
+                        return isNaN(d.getTime()) ? l.createdAt : d.toLocaleString();
+                      })()}
                     </td>
                     <td className="py-3 px-4">
                       <p className="font-bold text-slate-900">{l.userName}</p>

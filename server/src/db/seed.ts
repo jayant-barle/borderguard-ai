@@ -29,14 +29,24 @@ export function seedDatabase() {
     `).run();
   }
 
-  // 3. Clean up any previous hardcoded mock documents from the central registry
+  // 3. Seed Official Central Government Document Record (Ananya Verma - P94821037)
   try {
-    db.prepare(`
-      DELETE FROM documents 
-      WHERE document_number IN ('P94821037', 'M39281745', 'K88492011', 'Z47291055', 'R67129481', 'E55192837')
-    `).run();
+    const existingAnanya = db.prepare('SELECT id FROM documents WHERE document_number = ?').get('P94821037');
+    if (!existingAnanya) {
+      db.prepare(`
+        INSERT INTO documents (
+          document_number, document_type, holder_name, nationality,
+          date_of_birth, gender, issue_date, expiry_date, status, photo_url, notes
+        ) VALUES (
+          'P94821037', 'PASSPORT', 'ANANYA VERMA', 'INDIAN',
+          '1994-06-18', 'F', '2021-04-12', '2031-04-11', 'ACTIVE',
+          '/assets/specimens/reference_ananya_verma.png',
+          'Official Government Identity Record • Specimen Citizen Reference'
+        )
+      `).run();
+    }
   } catch (err: any) {
-    console.warn('Document cleanup note:', err.message);
+    console.warn('Document seed note:', err.message);
   }
 
   // 4. Seed Audit Logs

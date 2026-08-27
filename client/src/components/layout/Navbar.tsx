@@ -19,9 +19,10 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, title }) => {
   useEffect(() => {
     const updateTime = () => {
       const now = new Date();
+      const tzName = Intl.DateTimeFormat().resolvedOptions().timeZone.split('/').pop()?.replace('_', ' ') || 'LOCAL';
       setTimeStr(
         now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) +
-          ' IST'
+          ` (${tzName})`
       );
     };
     updateTime();

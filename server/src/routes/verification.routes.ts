@@ -90,54 +90,76 @@ router.post('/process', authenticateToken, upload.single('document'), async (req
     // Step 1: Demo Scenario Identification (SHA256 / Perceptual / Signature)
     const scenarioResult = DemoScenarioService.identifyScenario(imageBuffer, filename, explicitScenario);
 
-    // Step 2: Image Quality Analysis
-    const imageQuality = ImageQualityService.analyze(imageBuffer, scenarioResult.scenario);
-
-    // Step 3: OCR Extraction (VLM + Local Tesseract + SVG text)
-    const ocr = await OCRService.extractFields(imageBuffer, scenarioResult.scenario, filename);
-
-    // Step 4: MRZ Validation
-    const mrz = MRZValidationService.validate(scenarioResult.scenario, ocr, ocr.mrzLines);
-
-    // Step 5: Face Extraction & Biometric Analysis
+    // Step 2: Face Extraction & 360° Rotational Deskewing
     const faceVerification = await FaceVerificationService.verify(
       imageBuffer,
       scenarioResult.scenario
     );
 
-    // Step 6: Register Uploaded Document into Central Government Registry & Verify
+    // Auto-deskew / Upright document if uploaded upside down or sideways
+    let effectiveImageBuffer = imageBuffer;
+    let effectiveImagePath = imagePath;
+    if (faceVerification.uprightedDocUrl) {
+      effectiveImagePath = faceVerification.uprightedDocUrl;
+      const localUprightPath = path.join(process.cwd(), faceVerification.uprightedDocUrl.replace(/^\//, ''));
+      if (fs.existsSync(localUprightPath)) {
+        try {
+          effectiveImageBuffer = fs.readFileSync(localUprightPath);
+        } catch {}
+      }
+    }
+
+    // Step 3: Image Quality Analysis
+    const imageQuality = ImageQualityService.analyze(effectiveImageBuffer, scenarioResult.scenario);
+
+    // Step 4: OCR Extraction (VLM + Local Tesseract + SVG text on uprighted buffer)
+    const ocr = await OCRService.extractFields(effectiveImageBuffer, scenarioResult.scenario, filename);
+
+    // Step 5: MRZ Validation
+    const mrz = MRZValidationService.validate(scenarioResult.scenario, ocr, ocr.mrzLines);
+
+    // Step 6: Query Central Government Registry (Read-only check against authentic records)
     const cleanDocNum = (ocr.fields.documentNumber?.value && ocr.fields.documentNumber.value !== 'DOC-UNREAD')
       ? ocr.fields.documentNumber.value.trim().toUpperCase()
-      : `DOC-${Date.now().toString().slice(-6)}`;
+      : (filename ? filename.replace(/\.[^/.]+$/, '').toUpperCase() : `DOC-${Date.now().toString().slice(-6)}`);
     const cleanHolderName = (ocr.fields.fullName?.value && ocr.fields.fullName.value !== 'TRAVELER')
       ? ocr.fields.fullName.value.trim().toUpperCase()
-      : (filename ? filename.replace(/\.[^/.]+$/, '').toUpperCase() : 'REGISTERED CITIZEN');
+      : (filename ? filename.replace(/\.[^/.]+$/, '').replace(/[_\-]/g, ' ').toUpperCase() : 'REGISTERED CITIZEN');
     const cleanNationality = ocr.fields.nationality?.value || 'IND';
     const cleanDob = ocr.fields.dateOfBirth?.value || '1990-01-01';
     const cleanGender = ocr.fields.gender?.value || 'F';
     const cleanIssue = ocr.fields.issueDate?.value || new Date().toISOString().split('T')[0];
     const cleanExpiry = ocr.fields.expiryDate?.value || '2034-12-31';
 
-    // Register/Upsert this uploaded document into SQLite Central Documents Registry
-    IdentityMatchingService.registerOrUpdateDocument({
-      documentNumber: cleanDocNum,
-      documentType,
-      holderName: cleanHolderName,
-      nationality: cleanNationality,
-      dateOfBirth: cleanDob,
-      gender: cleanGender,
-      issueDate: cleanIssue,
-      expiryDate: cleanExpiry,
-      photoUrl: faceVerification.extractedFaceUrl || imagePath,
-      notes: `Screened and registered in Central Registry on ${new Date().toLocaleDateString()}`
-    });
-
-    const databaseVerification = IdentityMatchingService.verifyInDatabase(
+    let databaseVerification = IdentityMatchingService.verifyInDatabase(
       cleanDocNum,
       cleanHolderName,
       cleanDob,
       cleanExpiry
     );
+
+    // If new unsaved document, register initial record in registry
+    if (!databaseVerification.recordFound && scenarioResult.scenario === 'UNKNOWN') {
+      IdentityMatchingService.registerOrUpdateDocument({
+        documentNumber: cleanDocNum,
+        documentType,
+        holderName: cleanHolderName,
+        nationality: cleanNationality,
+        dateOfBirth: cleanDob,
+        gender: cleanGender,
+        issueDate: cleanIssue,
+        expiryDate: cleanExpiry,
+        photoUrl: faceVerification.extractedFaceUrl || imagePath,
+        notes: `Auto-registered upon document screening scan on ${new Date().toLocaleDateString()}`
+      });
+
+      databaseVerification = IdentityMatchingService.verifyInDatabase(
+        cleanDocNum,
+        cleanHolderName,
+        cleanDob,
+        cleanExpiry
+      );
+    }
 
     // Step 7: Dynamic Substrate & Photo Tampering Analysis
     const isBiometricMismatch = faceVerification.consistency === 'POSSIBLE_MISMATCH' || faceVerification.similarityScore < 60;
@@ -192,7 +214,7 @@ router.post('/process', authenticateToken, upload.single('document'), async (req
       officerName: req.user!.name,
       officerBadge: req.user!.badge_number,
       documentType,
-      documentImage: imagePath,
+      documentImage: imagePath, // Preserves the exact user uploaded/adjusted document image
       documentNumber: ocr.fields.documentNumber.value,
       holderName: ocr.fields.fullName.value,
       aiMode: ollamaAnalysis?.model?.includes('llama') ? 'OLLAMA_AI' : 'HYBRID_AI',
@@ -226,13 +248,17 @@ router.post('/save', authenticateToken, async (req: AuthRequest, res: Response) 
       return res.status(400).json({ error: 'Incomplete verification payload.' });
     }
 
+    const currentIso = result.timestamp && !isNaN(new Date(result.timestamp).getTime())
+      ? new Date(result.timestamp).toISOString()
+      : new Date().toISOString();
+
     const insert = db.prepare(`
-      INSERT INTO verification_sessions (
+      INSERT OR REPLACE INTO verification_sessions (
         verification_id, officer_id, officer_name, officer_badge,
         document_type, document_image, document_number, holder_name,
         ai_mode, scenario_detected, risk_score, risk_level, final_status,
-        processing_time_ms, details_json, notes
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        processing_time_ms, details_json, notes, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     insert.run(
@@ -250,8 +276,9 @@ router.post('/save', authenticateToken, async (req: AuthRequest, res: Response) 
       result.risk.level,
       result.risk.status,
       result.processingTimeMs,
-      JSON.stringify(result),
-      result.notes || ''
+      JSON.stringify({ ...result, timestamp: currentIso }),
+      result.notes || '',
+      currentIso
     );
 
     logAuditEvent(
@@ -270,10 +297,22 @@ router.post('/save', authenticateToken, async (req: AuthRequest, res: Response) 
   }
 });
 
+// Helper to ensure valid UTC ISO timestamp representation
+const normalizeUtcIso = (dateVal: any): string => {
+  if (!dateVal) return new Date().toISOString();
+  let str = String(dateVal).trim();
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/.test(str)) {
+    str = str.replace(' ', 'T') + 'Z';
+  } else if (!str.endsWith('Z') && !str.includes('+') && str.includes('T')) {
+    str = str + 'Z';
+  }
+  return str;
+};
+
 // GET /api/verification/history
 router.get('/history', authenticateToken, (req: AuthRequest, res: Response) => {
   try {
-    const { search, riskLevel, status, documentType, limit = 50, offset = 0 } = req.query;
+    const { search, riskLevel, status, documentType, startDate, endDate, limit = 100, offset = 0 } = req.query;
 
     let query = 'SELECT * FROM verification_sessions WHERE 1=1';
     const params: any[] = [];
@@ -298,6 +337,16 @@ router.get('/history', authenticateToken, (req: AuthRequest, res: Response) => {
       params.push(documentType);
     }
 
+    if (startDate) {
+      query += " AND strftime('%Y-%m-%d', created_at, 'localtime') >= ?";
+      params.push(startDate);
+    }
+
+    if (endDate) {
+      query += " AND strftime('%Y-%m-%d', created_at, 'localtime') <= ?";
+      params.push(endDate);
+    }
+
     query += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
     params.push(Number(limit), Number(offset));
 
@@ -305,12 +354,14 @@ router.get('/history', authenticateToken, (req: AuthRequest, res: Response) => {
 
     // Parse details JSON for frontend consumption
     const parsedRecords = records.map((r) => {
+      const normalizedTime = normalizeUtcIso(r.created_at);
       try {
         const details = JSON.parse(r.details_json);
         return {
           ...details,
           id: r.verification_id,
-          createdAt: r.created_at
+          createdAt: normalizedTime,
+          timestamp: normalizedTime
         };
       } catch {
         return {
@@ -320,7 +371,8 @@ router.get('/history', authenticateToken, (req: AuthRequest, res: Response) => {
           documentNumber: r.document_number,
           holderName: r.holder_name,
           risk: { score: r.risk_score, level: r.risk_level, status: r.final_status },
-          timestamp: r.created_at
+          timestamp: normalizedTime,
+          createdAt: normalizedTime
         };
       }
     });
@@ -334,6 +386,26 @@ router.get('/history', authenticateToken, (req: AuthRequest, res: Response) => {
   } catch (err: any) {
     console.error('History fetch error:', err);
     return res.status(500).json({ error: 'Failed to retrieve verification history.' });
+  }
+});
+
+// DELETE /api/verification/history
+// Clear all verification history sessions
+router.delete('/history', authenticateToken, (req: AuthRequest, res: Response) => {
+  try {
+    const info = db.prepare('DELETE FROM verification_sessions').run();
+    logAuditEvent(
+      req.user!,
+      'VERIFICATION_HISTORY_CLEARED',
+      'VERIFICATION',
+      'ALL',
+      `Cleared ${info.changes} verification records from history archives.`,
+      req.ip || '127.0.0.1'
+    );
+    return res.json({ success: true, message: `Successfully cleared ${info.changes} verification records.`, deletedCount: info.changes });
+  } catch (err: any) {
+    console.error('Clear history error:', err);
+    return res.status(500).json({ error: 'Failed to clear verification history.' });
   }
 });
 

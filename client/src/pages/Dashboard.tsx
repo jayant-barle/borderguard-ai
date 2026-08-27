@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ShieldCheck,
@@ -7,12 +7,11 @@ import {
   FileCheck2,
   ScanFace,
   Layers,
-  Clock,
   ArrowRight,
   RefreshCw,
   PlusCircle,
   TrendingUp,
-  Activity
+  AlertCircle
 } from 'lucide-react';
 import {
   AreaChart,
@@ -24,12 +23,10 @@ import {
   ResponsiveContainer,
   PieChart,
   Pie,
-  Cell,
-  BarChart,
-  Bar
+  Cell
 } from 'recharts';
 import { api } from '../services/api';
-import { DashboardMetrics, VerificationResult } from '../../../shared/types';
+import { DashboardMetrics } from '../../../shared/types';
 import { RiskBadge, StatusBadge } from '../components/ui/Badge';
 
 export const Dashboard: React.FC = () => {
@@ -38,22 +35,23 @@ export const Dashboard: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const data = await api.analytics.getDashboard();
       setMetrics(data);
     } catch (err: any) {
+      console.error('Failed to load dashboard metrics:', err);
       setError('Failed to retrieve dashboard metrics from server.');
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [loadData]);
 
   if (loading && !metrics) {
     return (
@@ -66,6 +64,12 @@ export const Dashboard: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {error && (
+        <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-xs font-semibold text-rose-700 flex items-center space-x-2">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
       {/* Top Welcome & Summary Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-2xs">
         <div>
@@ -200,8 +204,16 @@ export const Dashboard: React.FC = () => {
               >
                 <defs>
                   <linearGradient id="totalColor" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.4} />
+                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.35} />
                     <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.0} />
+                  </linearGradient>
+                  <linearGradient id="lowRiskColor" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.4} />
+                    <stop offset="95%" stopColor="#10b981" stopOpacity={0.0} />
+                  </linearGradient>
+                  <linearGradient id="medRiskColor" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.4} />
+                    <stop offset="95%" stopColor="#f59e0b" stopOpacity={0.0} />
                   </linearGradient>
                   <linearGradient id="highRiskColor" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#ef4444" stopOpacity={0.4} />
@@ -209,7 +221,7 @@ export const Dashboard: React.FC = () => {
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#64748b' }} />
+                <XAxis dataKey="displayDate" tick={{ fontSize: 10, fill: '#64748b', fontWeight: 600 }} />
                 <YAxis tick={{ fontSize: 10, fill: '#64748b' }} allowDecimals={false} />
                 <Tooltip
                   contentStyle={{
@@ -224,19 +236,41 @@ export const Dashboard: React.FC = () => {
                   type="monotone"
                   dataKey="total"
                   stroke="#3b82f6"
-                  strokeWidth={2}
+                  strokeWidth={2.5}
                   fillOpacity={1}
                   fill="url(#totalColor)"
                   name="Total Screened"
+                  dot={{ r: 3, fill: '#3b82f6' }}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="lowRisk"
+                  stroke="#10b981"
+                  strokeWidth={1.8}
+                  fillOpacity={1}
+                  fill="url(#lowRiskColor)"
+                  name="Low Risk (Verified)"
+                  dot={{ r: 2, fill: '#10b981' }}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="mediumRisk"
+                  stroke="#f59e0b"
+                  strokeWidth={1.8}
+                  fillOpacity={1}
+                  fill="url(#medRiskColor)"
+                  name="Medium Risk (Suspicious)"
+                  dot={{ r: 2, fill: '#f59e0b' }}
                 />
                 <Area
                   type="monotone"
                   dataKey="highRisk"
                   stroke="#ef4444"
-                  strokeWidth={2}
+                  strokeWidth={1.8}
                   fillOpacity={1}
                   fill="url(#highRiskColor)"
-                  name="High Risk"
+                  name="High Risk (Flagged)"
+                  dot={{ r: 2, fill: '#ef4444' }}
                 />
               </AreaChart>
             </ResponsiveContainer>

@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
-import { Upload, FileText, X, CheckCircle2, ShieldAlert, Sparkles, Image, ArrowRight } from 'lucide-react';
+import { Upload, FileText, X, CheckCircle2, ShieldAlert, Sparkles, Image, ArrowRight, Scissors, RotateCw, Crop } from 'lucide-react';
 import { DocumentType } from '../../../../shared/types';
+import { DocumentImageEditor } from './DocumentImageEditor';
 
 interface DragDropUploaderProps {
   selectedFile: File | null;
@@ -22,6 +23,7 @@ export const DragDropUploader: React.FC<DragDropUploaderProps> = ({
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isEditorOpen, setIsEditorOpen] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const documentTypes: Array<{ value: DocumentType; label: string; icon: string }> = [
@@ -171,7 +173,7 @@ export const DragDropUploader: React.FC<DragDropUploaderProps> = ({
             </p>
           </div>
         ) : (
-          <div className="bg-white rounded-2xl border border-slate-200 p-4 flex items-center justify-between shadow-xs">
+          <div className="bg-white rounded-2xl border border-slate-200 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
             <div className="flex items-center space-x-4">
               {previewUrl && (
                 <div className="w-20 h-14 rounded-lg overflow-hidden border border-slate-200 bg-slate-100 shrink-0">
@@ -191,14 +193,42 @@ export const DragDropUploader: React.FC<DragDropUploaderProps> = ({
                 </span>
               </div>
             </div>
-            <button
-              onClick={handleRemove}
-              className="p-2 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-colors"
-              title="Remove File"
-            >
-              <X className="w-5 h-5" />
-            </button>
+
+            <div className="flex items-center space-x-2 self-end sm:self-auto">
+              <button
+                type="button"
+                onClick={() => setIsEditorOpen(true)}
+                className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl border border-blue-200 bg-blue-50/80 hover:bg-blue-100 text-blue-700 text-xs font-bold transition-all shadow-2xs"
+                title="Rotate & Crop Document Boundaries"
+              >
+                <Scissors className="w-3.5 h-3.5 text-blue-600" />
+                <span>Rotate & Crop</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleRemove}
+                className="p-2 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-colors"
+                title="Remove File"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
           </div>
+        )}
+
+        {/* Interactive Document Image Studio Modal */}
+        {previewUrl && selectedFile && (
+          <DocumentImageEditor
+            imageSrc={previewUrl}
+            originalFileName={selectedFile.name}
+            isOpen={isEditorOpen}
+            onClose={() => setIsEditorOpen(false)}
+            onSave={(editedFile, editedDataUrl) => {
+              onFileSelect(editedFile);
+              setPreviewUrl(editedDataUrl);
+            }}
+          />
         )}
       </div>
 

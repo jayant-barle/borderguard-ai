@@ -1,10 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { RiskConfig, OllamaStatus } from '../../../../shared/types';
+import React, { useState, useEffect, useCallback } from 'react';
+import { OllamaStatus } from '../../../../shared/types';
 import { api } from '../../services/api';
-import { Sliders, CheckCircle2, AlertTriangle, RefreshCw, Save, RotateCcw, Bot, Cpu, Download, Sparkles, Server } from 'lucide-react';
+import { Sliders, CheckCircle2, AlertTriangle, RefreshCw, Save, RotateCcw, Bot, Download, Sparkles, Server } from 'lucide-react';
 
 export const RiskSettings: React.FC = () => {
-  const [config, setConfig] = useState<RiskConfig | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [saving, setSaving] = useState<boolean>(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -40,11 +39,10 @@ export const RiskSettings: React.FC = () => {
 
   const isWeightValid = Math.abs(totalWeight - 100) < 0.1;
 
-  const loadConfig = async () => {
+  const loadConfig = useCallback(async () => {
     setLoading(true);
     try {
       const data = await api.admin.getRiskConfig();
-      setConfig(data);
       setTamperingWeight(data.tamperingWeight);
       setFaceMismatchWeight(data.faceMismatchWeight);
       setDatabaseWeight(data.databaseWeight);
@@ -58,9 +56,9 @@ export const RiskSettings: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const loadOllama = async () => {
+  const loadOllama = useCallback(async () => {
     try {
       const status = await api.ai.getStatus();
       setOllamaStatus(status);
@@ -75,12 +73,12 @@ export const RiskSettings: React.FC = () => {
         error: 'Failed to connect to Ollama'
       });
     }
-  };
+  }, [ollamaUrl, selectedModel]);
 
   useEffect(() => {
     loadConfig();
     loadOllama();
-  }, []);
+  }, [loadConfig, loadOllama]);
 
   const handleTestOllama = async () => {
     setTestingOllama(true);

@@ -75,6 +75,47 @@ export const MRZInspector: React.FC<MRZInspectorProps> = ({ mrz }) => {
           ))}
         </div>
       </div>
+
+      {/* Cross-Verification: MRZ vs Visual Zone OCR Table */}
+      {mrz.fieldMatches && mrz.fieldMatches.length > 0 && (
+        <div className="border-t border-slate-100 pt-3 space-y-2">
+          <h5 className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+            ICAO MRZ Line vs Visual Zone OCR Cross-Check
+          </h5>
+          <div className="overflow-x-auto rounded-xl border border-slate-200 bg-slate-50/50">
+            <table className="w-full text-left text-xs font-mono">
+              <thead className="bg-slate-100/80 text-[10px] uppercase text-slate-600 font-bold border-b border-slate-200">
+                <tr>
+                  <th className="py-2 px-3">Field</th>
+                  <th className="py-2 px-3">Visual Zone OCR</th>
+                  <th className="py-2 px-3">MRZ Line Value</th>
+                  <th className="py-2 px-3 text-right">Alignment</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200/60">
+                {mrz.fieldMatches.map((fm, idx) => (
+                  <tr key={idx} className={fm.matches ? 'hover:bg-slate-50' : 'bg-rose-50/60 hover:bg-rose-50'}>
+                    <td className="py-2 px-3 font-sans font-semibold text-slate-700">{fm.field}</td>
+                    <td className="py-2 px-3 text-slate-800 font-bold">{fm.ocrValue || '—'}</td>
+                    <td className="py-2 px-3 text-slate-800 font-bold">{fm.mrzValue || '—'}</td>
+                    <td className="py-2 px-3 text-right">
+                      {fm.matches ? (
+                        <span className="inline-flex items-center text-[10px] font-bold text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded">
+                          <CheckCircle2 className="w-3 h-3 mr-1 text-emerald-600" /> Match
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center text-[10px] font-bold text-rose-700 bg-rose-100/80 px-2 py-0.5 rounded">
+                          <AlertTriangle className="w-3 h-3 mr-1 text-rose-600" /> Mismatch
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

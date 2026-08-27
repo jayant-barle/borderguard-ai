@@ -1,5 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { Camera, RefreshCw, X, Check, AlertCircle, SwitchCamera } from 'lucide-react';
+import { Camera, RefreshCw, X, Check, AlertCircle, SwitchCamera, Scissors } from 'lucide-react';
+import { DocumentImageEditor } from '../uploader/DocumentImageEditor';
 
 interface CameraScannerProps {
   onCapture: (imageBase64: string) => void;
@@ -14,6 +15,7 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, onCance
   const [error, setError] = useState<string | null>(null);
   const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
   const [loading, setLoading] = useState<boolean>(true);
+  const [isEditorOpen, setIsEditorOpen] = useState<boolean>(false);
 
   const startCamera = async () => {
     setLoading(true);
@@ -222,6 +224,16 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, onCance
               <RefreshCw className="w-4 h-4 mr-1" />
               Retake Photo
             </button>
+
+            <button
+              type="button"
+              onClick={() => setIsEditorOpen(true)}
+              className="flex items-center space-x-1.5 px-4 py-2.5 rounded-lg bg-blue-600/30 hover:bg-blue-600/40 text-blue-300 border border-blue-500/40 text-xs font-semibold transition-colors"
+            >
+              <Scissors className="w-4 h-4 mr-1 text-blue-400" />
+              Rotate & Crop
+            </button>
+
             <button
               onClick={handleConfirm}
               className="flex items-center space-x-1.5 px-6 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md transition-all"
@@ -230,6 +242,19 @@ export const CameraScanner: React.FC<CameraScannerProps> = ({ onCapture, onCance
               Process Captured Document
             </button>
           </>
+        )}
+
+        {/* Modal for Rotating and Cropping Camera Capture */}
+        {capturedImage && (
+          <DocumentImageEditor
+            imageSrc={capturedImage}
+            originalFileName="camera_snapshot.jpg"
+            isOpen={isEditorOpen}
+            onClose={() => setIsEditorOpen(false)}
+            onSave={(_file, editedDataUrl) => {
+              setCapturedImage(editedDataUrl);
+            }}
+          />
         )}
       </div>
     </div>

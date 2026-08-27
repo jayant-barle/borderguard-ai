@@ -79,14 +79,20 @@ export const api = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(result)
       }),
-    getHistory: (params?: { search?: string; riskLevel?: string; status?: string; documentType?: string }) => {
+    getHistory: (params?: { search?: string; riskLevel?: string; status?: string; documentType?: string; startDate?: string; endDate?: string }) => {
       const query = new URLSearchParams();
       if (params?.search) query.append('search', params.search);
       if (params?.riskLevel) query.append('riskLevel', params.riskLevel);
       if (params?.status) query.append('status', params.status);
       if (params?.documentType) query.append('documentType', params.documentType);
+      if (params?.startDate) query.append('startDate', params.startDate);
+      if (params?.endDate) query.append('endDate', params.endDate);
       return request<{ records: VerificationResult[]; total: number }>(`/verification/history?${query.toString()}`);
     },
+    clearHistory: () =>
+      request<{ success: boolean; message: string; deletedCount: number }>('/verification/history', {
+        method: 'DELETE'
+      }),
     getById: (id: string) => request<VerificationResult>(`/verification/${id}`)
   },
 

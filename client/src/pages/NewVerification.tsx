@@ -5,7 +5,7 @@ import { DragDropUploader } from '../components/uploader/DragDropUploader';
 import { CameraScanner } from '../components/scanner/CameraScanner';
 import { ProcessingStepper } from '../components/processing/ProcessingStepper';
 import { api } from '../services/api';
-import { ShieldCheck, Sparkles, AlertCircle, ArrowRight, Play } from 'lucide-react';
+import { AlertCircle, Play } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 export const NewVerification: React.FC = () => {

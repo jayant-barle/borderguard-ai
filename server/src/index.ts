@@ -3,7 +3,7 @@ import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import fs from 'fs';
-import { initDatabase } from './db/database';
+import { initDatabase, db } from './db/database';
 import { seedDatabase } from './db/seed';
 import { generateAllSpecimens } from './utils/generateSpecimens';
 import { OllamaService } from './services/OllamaService';
@@ -17,6 +17,14 @@ import aiRoutes from './routes/ai.routes';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+
+process.on('uncaughtException', (err) => {
+  console.error('[SatyaShield Server Uncaught Exception]:', err);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[SatyaShield Server Unhandled Rejection]:', reason);
+});
 
 // Initialize Database & Seed default data
 initDatabase();
@@ -76,7 +84,7 @@ if (fs.existsSync(clientDistDir)) {
   });
 }
 
-app.listen(PORT, async () => {
+const server = app.listen(PORT, async () => {
   console.log(`=======================================================`);
   console.log(`  🛡️  SatyaShield - Enterprise Security Operations     `);
   console.log(`  Server listening on http://localhost:${PORT}        `);

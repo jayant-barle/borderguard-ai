@@ -40,34 +40,23 @@ export class IdentityMatchingService {
       } catch {}
     }
 
-    const cleanPhoto = input.photoUrl || '/assets/specimens/reference_ananya_verma.png';
+    const cleanPhoto = input.photoUrl || (cleanDocNum === 'P94821037' ? '/assets/specimens/reference_ananya_verma.png' : undefined);
     const cleanNotes = input.notes || `Registered in Central Registry upon document screening scan on ${new Date().toLocaleDateString()}.`;
 
     // Check if document already exists
     const existing = db.prepare('SELECT * FROM documents WHERE UPPER(document_number) = ?').get(cleanDocNum) as DocumentRecord | undefined;
 
     if (existing) {
+      // Do not overwrite authentic government registered holder name with scanned OCR variation
       db.prepare(`
         UPDATE documents
         SET document_type = ?,
-            holder_name = ?,
-            nationality = ?,
-            date_of_birth = ?,
-            gender = ?,
-            issue_date = ?,
-            expiry_date = ?,
             status = COALESCE(?, status),
-            photo_url = COALESCE(?, photo_url),
+            photo_url = COALESCE(photo_url, ?),
             notes = ?
         WHERE id = ?
       `).run(
         cleanType,
-        cleanName,
-        cleanNat,
-        cleanDob,
-        cleanGender,
-        cleanIssue,
-        cleanExpiry,
         calculatedStatus,
         cleanPhoto,
         cleanNotes,
