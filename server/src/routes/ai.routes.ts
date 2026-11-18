@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { OllamaService } from '../services/OllamaService';
-import { authenticateToken, AuthRequest } from '../middleware/auth';
+import { authenticateToken, requireAdmin, AuthRequest } from '../middleware/auth';
 import { logAuditEvent } from '../middleware/audit';
 
 const router = Router();
@@ -71,8 +71,8 @@ router.post('/analyze', authenticateToken, async (req: AuthRequest, res: Respons
 });
 
 // POST /api/ai/models/switch
-// Switch the active model used by SatyaShield
-router.post('/models/switch', authenticateToken, async (req: AuthRequest, res: Response) => {
+// Switch the active model used by SatyaShield (Restricted to Administrators)
+router.post('/models/switch', authenticateToken, requireAdmin, async (req: AuthRequest, res: Response) => {
   try {
     const { model } = req.body;
     if (!model || typeof model !== 'string') {
@@ -104,8 +104,8 @@ router.post('/models/switch', authenticateToken, async (req: AuthRequest, res: R
 });
 
 // POST /api/ai/models/pull
-// Trigger downloading a model in Ollama
-router.post('/models/pull', authenticateToken, async (req: AuthRequest, res: Response) => {
+// Trigger downloading a model in Ollama (Restricted to Administrators)
+router.post('/models/pull', authenticateToken, requireAdmin, async (req: AuthRequest, res: Response) => {
   try {
     const { model } = req.body;
     if (!model || typeof model !== 'string') {
@@ -120,8 +120,8 @@ router.post('/models/pull', authenticateToken, async (req: AuthRequest, res: Res
 });
 
 // POST /api/ai/config
-// Update Ollama server connection URL
-router.post('/config', authenticateToken, async (req: AuthRequest, res: Response) => {
+// Update Ollama server connection URL (Restricted to Administrators)
+router.post('/config', authenticateToken, requireAdmin, async (req: AuthRequest, res: Response) => {
   try {
     const { baseUrl } = req.body;
     if (!baseUrl || typeof baseUrl !== 'string') {
