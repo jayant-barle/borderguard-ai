@@ -70,7 +70,11 @@ export class RiskEngine {
     // 1. Tampering Factor
     let tamperingPenalty = 0;
     let tamperingSeverity: 'LOW' | 'MEDIUM' | 'HIGH' = 'LOW';
-    if (tampering.detected) {
+    if (tampering.status === 'ERROR') {
+      tamperingPenalty = 96;
+      tamperingSeverity = 'HIGH';
+      rationale.push('Tampering forensics module encountered an error (failing closed).');
+    } else if (tampering.detected) {
       tamperingPenalty = 96;
       tamperingSeverity = 'HIGH';
       rationale.push('Critical forensic tampering anomaly: Photo substitution detected.');
@@ -92,7 +96,11 @@ export class RiskEngine {
     // 2. Face Biometric Factor
     let facePenalty = 0;
     let faceSeverity: 'LOW' | 'MEDIUM' | 'HIGH' = 'LOW';
-    if (face.consistency === 'POSSIBLE_MISMATCH' || face.similarityScore < 60) {
+    if (face.status === 'ERROR') {
+      facePenalty = 95;
+      faceSeverity = 'HIGH';
+      rationale.push('Face verification module encountered an error (failing closed).');
+    } else if (face.consistency === 'POSSIBLE_MISMATCH' || (face.similarityScore !== null && face.similarityScore < 60)) {
       facePenalty = 95;
       faceSeverity = 'HIGH';
       rationale.push(`Facial biometric similarity is only ${face.similarityScore}%, indicating a probable photo mismatch.`);
@@ -112,7 +120,7 @@ export class RiskEngine {
     });
 
     // When severe tampering is detected with face mismatch, calculate identity substitution penalty
-    const isPhotoReplacement = tampering.detected && (face.consistency === 'POSSIBLE_MISMATCH' || face.similarityScore < 60);
+    const isPhotoReplacement = tampering.detected && (face.consistency === 'POSSIBLE_MISMATCH' || (face.similarityScore !== null && face.similarityScore < 60));
 
     // 3. Database Verification Factor
     let dbPenalty = 0;
@@ -246,26 +254,57 @@ export class RiskEngine {
       recommendedAction = 'MEDIUM RISK — OFFICER DISCRETIONARY CHECK RECOMMENDED';
     }
 
+    // Fail closed: If tampering or face status is ERROR, force REQUIRES_MANUAL_REVIEW and add rationale naming the module
+    if (tampering.status === 'ERROR' || face.status === 'ERROR') {
+      status = 'REQUIRES_MANUAL_REVIEW';
+      level = 'HIGH';
+      if (tampering.status === 'ERROR') {
+        rationale.push('Forensic failure: TamperingService failed closed with status ERROR (manual review required).');
+      }
+      if (face.status === 'ERROR') {
+        rationale.push('Forensic failure: FaceVerificationService failed closed with status ERROR (manual review required).');
+      }
+      recommendedAction = 'FORENSIC FAILURE — REQUIRES MANUAL REVIEW / SECONDARY INSPECTION';
+    }
+
     // Explainable "Why is this document suspicious?" block for high-risk / tampering cases
     let whySuspicious: ExplainableWhySuspicious | undefined;
 
-    if (tampering.detected || level === 'HIGH') {
+    if (tampering.detected || level === 'HIGH' || status === 'REQUIRES_MANUAL_REVIEW') {
+      const hasForensicError = tampering.status === 'ERROR' || face.status === 'ERROR';
+      const flags: string[] = [];
+
+      if (tampering.status === 'ERROR') {
+        flags.push('🚨 Tampering forensics module encountered an unrecoverable analysis error (failed closed)');
+      } else if (tampering.detected) {
+        flags.push('🚨 Passport photograph exhibits digital insertion and boundary feathering artifacts');
+        flags.push('🚨 JPEG Error Level Analysis reveals compression quantization discontinuity around photo frame');
+      }
+
+      if (face.status === 'ERROR') {
+        flags.push('🚨 Facial biometric verification module encountered an unrecoverable analysis error (failed closed)');
+      } else if (face.consistency === 'POSSIBLE_MISMATCH' || (face.similarityScore !== null && face.similarityScore < 60)) {
+        flags.push(`⚠ Facial biometric verification similarity is ${face.similarityScore}% (Likely face mismatch against central record)`);
+      }
+
+      if (isPhotoReplacement) {
+        flags.push('🚨 Identity consistency anomaly: Valid passport shell with substituted photo');
+      }
+
       whySuspicious = {
-        title: 'Why is this document flagged as High Risk?',
+        title: hasForensicError ? 'Why is this document flagged for Manual Review?' : 'Why is this document flagged as High Risk?',
         checksPassed: [
           '✓ Document number matches registered government database record',
           '✓ ICAO 9303 MRZ check digits and composite hash are mathematically valid',
           '✓ Biographical text fields (Name, Nationality, DOB) are consistent with registry',
           '✓ Optical scan resolution and contrast are sufficient for inspection'
         ],
-        flagsDetected: [
-          '🚨 Passport photograph exhibits digital insertion and boundary feathering artifacts',
-          '🚨 JPEG Error Level Analysis reveals compression quantization discontinuity around photo frame',
-          '⚠ Facial biometric verification similarity is 43.2% (Likely face mismatch against central record)',
-          '🚨 Identity consistency anomaly: Valid passport shell with substituted photo'
+        flagsDetected: flags.length > 0 ? flags : [
+          '🚨 Forensic evaluation failed closed due to image processing anomaly'
         ],
-        conclusion:
-          'In DEMO MODE, this scenario simulates a photo replacement attack. While the document number and MRZ data belong to a legitimate traveler, the photograph does not match the registered profile. Manual secondary inspection is required.',
+        conclusion: hasForensicError
+          ? 'Automated forensic analysis could not verify image integrity (failed closed). Manual secondary inspection is required.'
+          : 'In DEMO MODE, this scenario simulates a photo replacement attack. While the document number and MRZ data belong to a legitimate traveler, the photograph does not match the registered profile. Manual secondary inspection is required.',
         investigationGuidance: [
           '1. Request physical passport inspection and examine UV substrate under 365nm light.',
           '2. Compare live passenger biometric capture against chip data / central repository.',

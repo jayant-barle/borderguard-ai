@@ -27,23 +27,49 @@ export class DemoScenarioService {
   }
 
   /**
-   * Identifies the scenario from image buffer, file data, or image properties
-   * Uses SHA-256 exact match + perceptual visual heuristics
+   * Checks if buffer matches bundled genuine specimen (gated by DEMO_MODE)
+   */
+  public static isGenuineSpecimen(buffer: Buffer): boolean {
+    if (process.env.DEMO_MODE !== 'true' || !buffer || buffer.length === 0) {
+      return false;
+    }
+    const sha256 = crypto.createHash('sha256').update(buffer).digest('hex').toLowerCase();
+    return this.genuineHashes.has(sha256);
+  }
+
+  /**
+   * Checks if buffer matches bundled tampered specimen (gated by DEMO_MODE)
+   */
+  public static isTamperedSpecimen(buffer: Buffer): boolean {
+    if (process.env.DEMO_MODE !== 'true' || !buffer || buffer.length === 0) {
+      return false;
+    }
+    const sha256 = crypto.createHash('sha256').update(buffer).digest('hex').toLowerCase();
+    return this.photoReplacementHashes.has(sha256);
+  }
+
+  /**
+   * Identifies the scenario from image buffer.
+   * Authority is granted ONLY when DEMO_MODE=true and SHA-256 matches a bundled specimen.
+   * Filename heuristics and client-controlled tags have no effect in production.
    */
   public static identifyScenario(
     buffer: Buffer,
     filename?: string,
     explicitScenarioHeader?: string
   ): { scenario: DemoScenario; confidence: number; detectionMethod: string } {
-    // 1. Direct explicit header or parameter if provided in demo testing
-    if (explicitScenarioHeader === 'GENUINE_PASSPORT' || explicitScenarioHeader === 'SCENARIO_1') {
-      return { scenario: 'GENUINE_PASSPORT', confidence: 100, detectionMethod: 'EXPLICIT_SPECIMEN_TAG' };
-    }
-    if (explicitScenarioHeader === 'PHOTO_REPLACEMENT' || explicitScenarioHeader === 'SCENARIO_2') {
-      return { scenario: 'PHOTO_REPLACEMENT', confidence: 100, detectionMethod: 'EXPLICIT_SPECIMEN_TAG' };
+    if (!buffer || buffer.length === 0) {
+      return { scenario: 'UNKNOWN', confidence: 0, detectionMethod: 'STANDARD_IMAGE_PIPELINE' };
     }
 
-    // 2. Exact SHA-256 Hash check
+    const isDemoMode = process.env.DEMO_MODE === 'true';
+
+    // In production or when DEMO_MODE is not enabled, all uploads follow standard pipeline
+    if (!isDemoMode) {
+      return { scenario: 'UNKNOWN', confidence: 0, detectionMethod: 'STANDARD_IMAGE_PIPELINE' };
+    }
+
+    // Exact SHA-256 Hash check for registered specimens in demo mode
     const sha256 = crypto.createHash('sha256').update(buffer).digest('hex').toLowerCase();
     if (this.genuineHashes.has(sha256)) {
       return { scenario: 'GENUINE_PASSPORT', confidence: 100, detectionMethod: 'SHA256_EXACT_MATCH' };
@@ -52,16 +78,7 @@ export class DemoScenarioService {
       return { scenario: 'PHOTO_REPLACEMENT', confidence: 100, detectionMethod: 'SHA256_EXACT_MATCH' };
     }
 
-    // 3. Filename heuristic fallback if original specimen filename was preserved
-    const lowerName = (filename || '').toLowerCase();
-    if (lowerName.includes('genuine') || lowerName.includes('specimen_1') || lowerName.includes('scenario_1') || lowerName.includes('pass_1')) {
-      return { scenario: 'GENUINE_PASSPORT', confidence: 95, detectionMethod: 'METADATA_SIGNATURE' };
-    }
-    if (lowerName.includes('tamper') || lowerName.includes('mismatch') || lowerName.includes('replacement') || lowerName.includes('specimen_2') || lowerName.includes('scenario_2') || lowerName.includes('pass_2')) {
-      return { scenario: 'PHOTO_REPLACEMENT', confidence: 95, detectionMethod: 'METADATA_SIGNATURE' };
-    }
-
-    // 4. Perceptual image sample fingerprinting (comparing sampled bytes distribution)
+    // Perceptual image sample fingerprinting (gated behind DEMO_MODE)
     const sampledFingerprint = this.computePerceptualFingerprint(buffer);
     if (sampledFingerprint === 'GENUINE_PATTERN') {
       return { scenario: 'GENUINE_PASSPORT', confidence: 92, detectionMethod: 'PERCEPTUAL_FINGERPRINT' };
@@ -70,12 +87,12 @@ export class DemoScenarioService {
       return { scenario: 'PHOTO_REPLACEMENT', confidence: 92, detectionMethod: 'PERCEPTUAL_FINGERPRINT' };
     }
 
-    // 5. If not recognized as one of the two specimen passports, classify as UNKNOWN
-    return { scenario: 'UNKNOWN', confidence: 80, detectionMethod: 'STANDARD_IMAGE_PIPELINE' };
+    return { scenario: 'UNKNOWN', confidence: 0, detectionMethod: 'STANDARD_IMAGE_PIPELINE' };
   }
 
   /**
    * Lightweight perceptual fingerprint using byte block entropy and color channels
+   * Active ONLY under DEMO_MODE
    */
   private static computePerceptualFingerprint(buffer: Buffer): 'GENUINE_PATTERN' | 'TAMPERED_PATTERN' | 'UNKNOWN' {
     if (buffer.length < 100) return 'UNKNOWN';

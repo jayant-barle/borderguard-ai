@@ -169,7 +169,7 @@ Analyze the provided document inspection forensic metrics and return ONLY a vali
 - DOB: ${params.ocr.fields.dateOfBirth.value} | Expiry: ${params.ocr.fields.expiryDate.value}
 - Tampering Flagged: ${params.tampering.detected ? 'YES (' + params.tampering.type + ')' : 'NO'}
 - Tampering Summary: ${params.tampering.summary}
-- Face Biometric Similarity: ${params.face.similarityScore}% (${params.face.consistency})
+- Face Biometric Similarity: ${params.face.similarityScore !== null ? `${params.face.similarityScore}%` : 'N/A (Analysis Error)'} (${params.face.consistency})
 - Face Summary: ${params.face.summary}
 - MRZ Checksum Status: ${params.mrz.overallStatus} (${params.mrz.checksums.filter((c) => !c.valid).length} invalid checksums)
 - Central Database Match: ${params.database.recordFound ? 'FOUND - ' + params.database.status : 'RECORD_NOT_FOUND'}
@@ -271,7 +271,7 @@ CURRENT CASE DOSSIER UNDER INSPECTION:
 - Nationality: ${dossierContext.ocr?.fields?.nationality?.value || 'N/A'}
 - Overall Risk: ${dossierContext.risk?.level} (${dossierContext.risk?.score}/100) - Status: ${dossierContext.risk?.status}
 - Tampering Detected: ${dossierContext.tampering?.detected ? 'YES (' + dossierContext.tampering.type + ')' : 'NO'} (${dossierContext.tampering?.summary || ''})
-- Facial Biometric Similarity: ${dossierContext.faceVerification?.similarityScore}% (${dossierContext.faceVerification?.consistency})
+- Facial Biometric Similarity: ${dossierContext.faceVerification?.similarityScore !== null && dossierContext.faceVerification?.similarityScore !== undefined ? `${dossierContext.faceVerification.similarityScore}%` : 'N/A'} (${dossierContext.faceVerification?.consistency})
 - Database Status: ${dossierContext.databaseVerification?.status} (Watchlist Flag: ${dossierContext.databaseVerification?.watchlistFlag ? 'YES' : 'NO'})
 - MRZ Status: ${dossierContext.mrz?.overallStatus}
 - Action Recommended: ${dossierContext.risk?.recommendedAction}
@@ -301,7 +301,7 @@ ${contextString}`;
           reply = `**Tampering Forensic Analysis for Dossier ${dossierContext.id}:**\n\n` +
             `🚨 **Critical Finding:** Digital Photo Substitution detected.\n` +
             `• **Boundary Artifacts:** Irregular feathering and pixel density anomalies at the portrait perimeter.\n` +
-            `• **Biometric Mismatch:** Face similarity with central registry is only ${dossierContext.faceVerification?.similarityScore}%.\n` +
+            `• **Biometric Mismatch:** Face similarity with central registry is only ${dossierContext.faceVerification?.similarityScore !== null && dossierContext.faceVerification?.similarityScore !== undefined ? `${dossierContext.faceVerification.similarityScore}%` : 'N/A'}.\n` +
             `• **Recommended Action:** Escalate to secondary inspection with UV 365nm optical substrate verification and live biometric capture.`;
         } else {
           reply = `**Forensic Assessment for Dossier ${dossierContext?.id || 'Active'}:**\n\n` +
@@ -433,10 +433,10 @@ ${contextString}`;
         model: 'SatyaShield-Heuristic-AI',
         timestamp: new Date().toISOString(),
         executiveSummary: `High-risk identity screening alert for ${params.holderName} (${params.documentNumber}). Forensic sensors flagged severe document manipulation anomalies.`,
-        threatAssessment: `Critical Photo Replacement Anomaly detected. The physical document passport shell corresponds to a valid registration, but the portrait contains digital boundary artifacts with biometric facial mismatch (${params.face.similarityScore}% similarity).`,
+        threatAssessment: `Critical Photo Replacement Anomaly detected. The physical document passport shell corresponds to a valid registration, but the portrait contains digital boundary artifacts with biometric facial mismatch (${params.face.similarityScore !== null ? `${params.face.similarityScore}%` : 'N/A'} similarity).`,
         anomalyAnalysis: [
           'Digital portrait substitution detected along photo boundary perimeter',
-          `Biometric facial similarity index is ${params.face.similarityScore}% (Threshold: 60%)`,
+          `Biometric facial similarity index is ${params.face.similarityScore !== null ? `${params.face.similarityScore}%` : 'N/A'} (Threshold: 60%)`,
           'Error Level Analysis shows compression artifact discrepancy in photo zone',
           params.database.recordFound ? 'Central registry document record matches metadata but photo hash diverges' : 'Unregistered document number in central authority database'
         ],
@@ -458,7 +458,7 @@ ${contextString}`;
       threatAssessment: 'No forensic tampering, biometric divergence, or watchlist matches detected. Document integrity is verified under ICAO 9303 standards.',
       anomalyAnalysis: [
         'ICAO 9303 MRZ check digits and composite checksum verified mathematically',
-        `Biometric facial verification confirmed with ${params.face.similarityScore}% facial similarity`,
+        `Biometric facial verification confirmed with ${params.face.similarityScore !== null ? `${params.face.similarityScore}%` : 'N/A'} facial similarity`,
         'Document substrate optical resolution and contrast meet high-security thresholds',
         'Central government database record active and verified with no sanctions'
       ],

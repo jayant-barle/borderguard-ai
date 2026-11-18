@@ -17,7 +17,8 @@ export const DocumentPhotoViewer: React.FC<DocumentPhotoViewerProps> = ({
 }) => {
   const [viewRotation, setViewRotation] = useState<number>(0);
   const [viewZoom, setViewZoom] = useState<number>(1);
-  const isMatch = faceVerification.consistency === 'LIKELY_MATCH';
+  const isError = faceVerification.status === 'ERROR' || faceVerification.consistency === 'ERROR';
+  const isMatch = !isError && faceVerification.consistency === 'LIKELY_MATCH';
   const score = faceVerification.similarityScore;
 
   return (
@@ -132,14 +133,18 @@ export const DocumentPhotoViewer: React.FC<DocumentPhotoViewerProps> = ({
                 ) : (
                   <div className="flex flex-col items-center justify-center p-3 text-center text-rose-500 space-y-1.5">
                     <ScanFace className="w-8 h-8 text-rose-400" />
-                    <span className="text-[10px] font-bold text-rose-600">No Photo Detected</span>
-                    <span className="text-[9px] text-slate-400">Portrait absent on doc</span>
+                    <span className="text-[10px] font-bold text-rose-600">
+                      {isError ? 'Analysis Error' : 'No Photo Detected'}
+                    </span>
+                    <span className="text-[9px] text-slate-400">
+                      {isError ? 'Processing failed' : 'Portrait absent on doc'}
+                    </span>
                   </div>
                 )}
               </div>
               <div className="pt-0.5">
                 <p className="text-[10px] font-bold text-slate-800 uppercase tracking-wide">
-                  {faceVerification.extractedFaceUrl ? 'Extracted Photo' : 'Missing Photo'}
+                  {faceVerification.extractedFaceUrl ? 'Extracted Photo' : isError ? 'Analysis Error' : 'Missing Photo'}
                 </p>
                 <p className="text-[9px] text-slate-500">From Uploaded Specimen</p>
               </div>
@@ -182,34 +187,52 @@ export const DocumentPhotoViewer: React.FC<DocumentPhotoViewerProps> = ({
               <span className="text-slate-700">Biometric Similarity</span>
               <span
                 className={`font-mono ${
-                  score > 80 ? 'text-emerald-700' : score > 55 ? 'text-amber-700' : 'text-rose-700'
+                  isError
+                    ? 'text-rose-700'
+                    : score !== null && score > 80
+                    ? 'text-emerald-700'
+                    : score !== null && score > 55
+                    ? 'text-amber-700'
+                    : 'text-rose-700'
                 }`}
               >
-                {score}%
+                {isError ? 'ERROR (N/A)' : `${score}%`}
               </span>
             </div>
 
             <div className="w-full h-2.5 rounded-full bg-slate-200 overflow-hidden">
               <div
                 className={`h-full rounded-full transition-all duration-700 ${
-                  score > 80 ? 'bg-emerald-500' : score > 55 ? 'bg-amber-500' : 'bg-rose-500'
+                  isError
+                    ? 'bg-rose-500'
+                    : score !== null && score > 80
+                    ? 'bg-emerald-500'
+                    : score !== null && score > 55
+                    ? 'bg-amber-500'
+                    : 'bg-rose-500'
                 }`}
-                style={{ width: `${score}%` }}
+                style={{ width: isError ? '100%' : `${score || 0}%` }}
               />
             </div>
 
             <div className="flex items-center space-x-1.5 pt-1">
-              {isMatch ? (
+              {isError ? (
+                <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+              ) : isMatch ? (
                 <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
               ) : (
                 <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
               )}
               <span
                 className={`text-[11px] font-bold ${
-                  isMatch ? 'text-emerald-800' : 'text-rose-800'
+                  isError ? 'text-rose-800' : isMatch ? 'text-emerald-800' : 'text-rose-800'
                 }`}
               >
-                {isMatch ? 'Likely Match (Verified)' : 'Possible Face Mismatch / Substituted Portrait'}
+                {isError
+                  ? '⚠ Biometric Verification Failed (Manual Review Required)'
+                  : isMatch
+                  ? 'Likely Match (Verified)'
+                  : 'Possible Face Mismatch / Substituted Portrait'}
               </span>
             </div>
           </div>

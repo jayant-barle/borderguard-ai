@@ -60,11 +60,11 @@ export const AIForensicCopilot: React.FC<AIForensicCopilotProps> = ({ result }) 
         content: isHighRisk
           ? `⚠️ **Security Alert: Dossier ${result.id}** for **${result.holderName}** is flagged as **HIGH RISK** (${result.risk.score}/100).\n\n` +
             `• Primary forensic concern: **${result.tampering?.summary || 'Identity / Biometric divergence'}**.\n` +
-            `• Facial similarity: **${result.faceVerification?.similarityScore}%**.\n\n` +
+            `• Facial similarity: **${result.faceVerification?.similarityScore !== null && result.faceVerification?.similarityScore !== undefined ? `${result.faceVerification.similarityScore}%` : 'N/A (Analysis Error)'}**.\n\n` +
             `I am your local Ollama AI Forensic Advisor. You can ask me for targeted cross-examination questions, legal admissibility guidelines, or to draft an escalation memo.`
           : `🛡️ **Dossier ${result.id}** for **${result.holderName}** is cleared as **LOW RISK / VERIFIED**.\n\n` +
             `• MRZ check digits: **Passed**.\n` +
-            `• Biometric face match: **${result.faceVerification?.similarityScore}%**.\n` +
+            `• Biometric face match: **${result.faceVerification?.similarityScore !== null && result.faceVerification?.similarityScore !== undefined ? `${result.faceVerification.similarityScore}%` : 'N/A'}**.\n` +
             `• Registry status: **${result.databaseVerification?.status || 'Active'}**.\n\n` +
             `How can I assist you with this traveler's clearance dossier?`,
         timestamp: new Date().toISOString()

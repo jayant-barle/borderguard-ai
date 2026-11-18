@@ -3,58 +3,66 @@ import path from 'path';
 import { execSync } from 'child_process';
 import sharp from 'sharp';
 import { FaceVerificationResult } from '../../../shared/types';
-import { DemoScenario } from './DemoScenarioService';
+import { DemoScenario, DemoScenarioService } from './DemoScenarioService';
 
 export class FaceVerificationService {
   /**
-   * Extract facial portrait from document and compare against database reference
+   * Extract facial portrait from document and compare against database reference.
+   * Fails closed with status: 'ERROR' if buffer is corrupt, truncated, or unprocessable.
    */
   public static async verify(
     buffer: Buffer,
     scenario: DemoScenario,
     databasePhotoUrl?: string
   ): Promise<FaceVerificationResult> {
-    const isSvg = this.isSvgBuffer(buffer);
-    const bufferStr = isSvg ? buffer.toString('utf-8') : '';
-
-    // Check for explicit tampered portrait markers in SVG
-    const hasTamperedMarker = bufferStr.includes('SUBSTITUTED PORTRAIT') ||
-      bufferStr.includes('photo-box-tampered') ||
-      bufferStr.includes('extractedFaceTamperedSvg') ||
-      bufferStr.includes('SPECIMEN_TAMPERED_PASSPORT') ||
-      bufferStr.includes('DEMO SPECIMEN 2');
-
-    // 1. Exact Genuine Demo Specimen
-    if (scenario === 'GENUINE_PASSPORT' && !hasTamperedMarker) {
+    // Edge case: zero-byte or missing buffer
+    if (!buffer || buffer.length === 0) {
       return {
-        consistency: 'LIKELY_MATCH',
-        similarityScore: 94.8,
-        confidence: 98.2,
-        extractedFaceUrl: '/assets/specimens/extracted_face_genuine.png',
-        databaseFaceUrl: databasePhotoUrl || '/assets/specimens/reference_ananya_verma.png',
-        landmarksMatch: true,
-        expressionNeutrality: 98.5,
-        pitchYawRoll: { pitch: 1.2, yaw: -0.8, roll: 0.4 },
-        summary: 'Facial biometric profile is highly consistent with central database reference. Likely match (94.8% similarity).'
-      };
-    }
-
-    // 2. Exact Tampered Demo Specimen
-    if (scenario === 'PHOTO_REPLACEMENT' || hasTamperedMarker) {
-      return {
-        consistency: 'POSSIBLE_MISMATCH',
-        similarityScore: 43.2,
-        confidence: 95.0,
-        extractedFaceUrl: '/assets/specimens/extracted_face_tampered.png',
-        databaseFaceUrl: databasePhotoUrl || '/assets/specimens/reference_ananya_verma.png',
+        status: 'ERROR',
+        consistency: 'ERROR',
+        similarityScore: null,
+        confidence: null,
         landmarksMatch: false,
-        expressionNeutrality: 92.0,
-        pitchYawRoll: { pitch: 4.1, yaw: -6.3, roll: 2.1 },
-        summary: '⚠ Biometric face verification indicates significant facial mismatch against registered identity photo (43.2% similarity).'
+        expressionNeutrality: 0.0,
+        pitchYawRoll: { pitch: 0.0, yaw: 0.0, roll: 0.0 },
+        summary: 'Facial biometric verification failed: Image buffer is empty (zero bytes).'
       };
     }
 
-    // 3. New / Custom Uploaded Document: Full-Document 360° Rotational Scanning
+    // Demo Mode specimens: Only returned when DEMO_MODE=true and exact SHA-256 match
+    const isDemoMode = process.env.DEMO_MODE === 'true';
+    if (isDemoMode) {
+      if (DemoScenarioService.isGenuineSpecimen(buffer)) {
+        return {
+          status: 'PASSED',
+          consistency: 'LIKELY_MATCH',
+          similarityScore: 94.8,
+          confidence: 98.2,
+          extractedFaceUrl: '/assets/specimens/extracted_face_genuine.png',
+          databaseFaceUrl: databasePhotoUrl || '/assets/specimens/reference_ananya_verma.png',
+          landmarksMatch: true,
+          expressionNeutrality: 98.5,
+          pitchYawRoll: { pitch: 1.2, yaw: -0.8, roll: 0.4 },
+          summary: 'Facial biometric profile is highly consistent with central database reference. Likely match (94.8% similarity).'
+        };
+      }
+      if (DemoScenarioService.isTamperedSpecimen(buffer)) {
+        return {
+          status: 'FAILED',
+          consistency: 'POSSIBLE_MISMATCH',
+          similarityScore: 43.2,
+          confidence: 95.0,
+          extractedFaceUrl: '/assets/specimens/extracted_face_tampered.png',
+          databaseFaceUrl: databasePhotoUrl || '/assets/specimens/reference_ananya_verma.png',
+          landmarksMatch: false,
+          expressionNeutrality: 92.0,
+          pitchYawRoll: { pitch: 4.1, yaw: -6.3, roll: 2.1 },
+          summary: '⚠ Biometric face verification indicates significant facial mismatch against registered identity photo (43.2% similarity).'
+        };
+      }
+    }
+
+    // New / Custom Uploaded Document: Real pixel analysis path
     try {
       const faceExtraction = await this.extractFaceFromImage(buffer);
       const extractedFaceUrl = faceExtraction.faceUrl;
@@ -62,7 +70,8 @@ export class FaceVerificationService {
       // Scenario: No face detected anywhere on the document
       if (!extractedFaceUrl) {
         return {
-          consistency: 'POSSIBLE_MISMATCH',
+          status: 'PASSED',
+          consistency: 'NO_FACE_DETECTED',
           similarityScore: 0.0,
           confidence: 92.0,
           extractedFaceUrl: undefined,
@@ -87,6 +96,7 @@ export class FaceVerificationService {
 
           if (biometricScore.similarity < 70) {
             return {
+              status: 'FAILED',
               consistency: 'POSSIBLE_MISMATCH',
               similarityScore: Number(biometricScore.similarity.toFixed(1)),
               confidence: 93.0,
@@ -102,6 +112,7 @@ export class FaceVerificationService {
           }
 
           return {
+            status: 'PASSED',
             consistency: 'LIKELY_MATCH',
             similarityScore: Number(biometricScore.similarity.toFixed(1)),
             confidence: 94.0,
@@ -119,6 +130,7 @@ export class FaceVerificationService {
 
       // Scenario: Face detected on newly scanned document (No central database reference yet)
       return {
+        status: 'PASSED',
         consistency: 'LIKELY_MATCH',
         similarityScore: 88.5,
         confidence: 88.0,
@@ -132,17 +144,18 @@ export class FaceVerificationService {
         summary: `Facial portrait successfully located and extracted from document (at ${faceExtraction.rotationDetected}° rotation).`
       };
     } catch (err: any) {
-      console.warn('[FaceVerificationService] Full-document face extraction error:', err.message);
+      console.warn('[FaceVerificationService] Face verification error (failing closed):', err.message);
       return {
-        consistency: 'POSSIBLE_MISMATCH',
-        similarityScore: 0.0,
-        confidence: 70.0,
+        status: 'ERROR',
+        consistency: 'ERROR',
+        similarityScore: null,
+        confidence: null,
         extractedFaceUrl: undefined,
         databaseFaceUrl: databasePhotoUrl,
         landmarksMatch: false,
         expressionNeutrality: 0.0,
         pitchYawRoll: { pitch: 0.0, yaw: 0.0, roll: 0.0 },
-        summary: 'Document portrait scan could not confirm facial presence.'
+        summary: `Facial biometric verification failed: ${err.message || 'Image processing error'}`
       };
     }
   }
@@ -182,76 +195,72 @@ export class FaceVerificationService {
     docBuffer: Buffer,
     refBuffer: Buffer
   ): Promise<{ similarity: number; mismatch: boolean }> {
-    try {
-      const docRaster = this.isSvgBuffer(docBuffer)
-        ? await sharp(docBuffer).png().toBuffer()
-        : docBuffer;
+    const docRaster = this.isSvgBuffer(docBuffer)
+      ? await sharp(docBuffer).png().toBuffer()
+      : docBuffer;
 
-      const refRaster = this.isSvgBuffer(refBuffer)
-        ? await sharp(refBuffer).png().toBuffer()
-        : refBuffer;
+    const refRaster = this.isSvgBuffer(refBuffer)
+      ? await sharp(refBuffer).png().toBuffer()
+      : refBuffer;
 
-      const docMeta = await sharp(docRaster).metadata();
-      const refMeta = await sharp(refRaster).metadata();
+    const docMeta = await sharp(docRaster).metadata();
+    const refMeta = await sharp(refRaster).metadata();
 
-      if (!docMeta.width || !docMeta.height || !refMeta.width || !refMeta.height) {
-        return { similarity: 85.0, mismatch: false };
-      }
-
-      const docPortrait = await sharp(docRaster)
-        .resize(120, 150, { fit: 'cover' })
-        .toBuffer();
-
-      const refPortrait = await sharp(refRaster)
-        .resize(120, 150, { fit: 'cover' })
-        .toBuffer();
-
-      // 1. Color channel Euclidean distance
-      const docStats = await sharp(docPortrait).stats();
-      const refStats = await sharp(refPortrait).stats();
-
-      const dR = docStats.channels[0].mean;
-      const dG = docStats.channels[1].mean;
-      const dB = docStats.channels[2].mean;
-
-      const rR = refStats.channels[0].mean;
-      const rG = refStats.channels[1].mean;
-      const rB = refStats.channels[2].mean;
-
-      const colorDist = Math.sqrt(Math.pow(dR - rR, 2) + Math.pow(dG - rG, 2) + Math.pow(dB - rB, 2));
-
-      // 2. Grayscale pixel correlation
-      const docGray = await sharp(docPortrait).grayscale().raw().toBuffer();
-      const refGray = await sharp(refPortrait).grayscale().raw().toBuffer();
-
-      let diffSum = 0;
-      for (let i = 0; i < docGray.length; i++) {
-        diffSum += Math.abs(docGray[i] - refGray[i]);
-      }
-      const pixelDiff = diffSum / (docGray.length * 255);
-
-      // Compute similarity score
-      const colorScore = Math.max(0, 1 - colorDist / 120);
-      const structScore = Math.max(0, 1 - pixelDiff * 1.6);
-      const rawSim = (colorScore * 0.6 + structScore * 0.4) * 100;
-
-      // Map score to realistic biometric ranges
-      const similarity = colorDist > 45 || pixelDiff > 0.25
-        ? Math.min(52.0, Math.max(36.0, rawSim * 0.7))
-        : Math.min(98.5, Math.max(86.0, rawSim));
-
-      const mismatch = similarity < 70;
-
-      return { similarity, mismatch };
-    } catch (e: any) {
-      console.warn('[FaceVerificationService] Biometric comparison error:', e.message);
-      return { similarity: 80.0, mismatch: false };
+    if (!docMeta.width || !docMeta.height || !refMeta.width || !refMeta.height) {
+      throw new Error('Invalid metadata for biometric comparison');
     }
+
+    const docPortrait = await sharp(docRaster)
+      .resize(120, 150, { fit: 'cover' })
+      .toBuffer();
+
+    const refPortrait = await sharp(refRaster)
+      .resize(120, 150, { fit: 'cover' })
+      .toBuffer();
+
+    // 1. Color channel Euclidean distance
+    const docStats = await sharp(docPortrait).stats();
+    const refStats = await sharp(refPortrait).stats();
+
+    const dR = docStats.channels[0].mean;
+    const dG = docStats.channels[1].mean;
+    const dB = docStats.channels[2].mean;
+
+    const rR = refStats.channels[0].mean;
+    const rG = refStats.channels[1].mean;
+    const rB = refStats.channels[2].mean;
+
+    const colorDist = Math.sqrt(Math.pow(dR - rR, 2) + Math.pow(dG - rG, 2) + Math.pow(dB - rB, 2));
+
+    // 2. Grayscale pixel correlation
+    const docGray = await sharp(docPortrait).grayscale().raw().toBuffer();
+    const refGray = await sharp(refPortrait).grayscale().raw().toBuffer();
+
+    let diffSum = 0;
+    for (let i = 0; i < docGray.length; i++) {
+      diffSum += Math.abs(docGray[i] - refGray[i]);
+    }
+    const pixelDiff = diffSum / (docGray.length * 255);
+
+    // Compute similarity score
+    const colorScore = Math.max(0, 1 - colorDist / 120);
+    const structScore = Math.max(0, 1 - pixelDiff * 1.6);
+    const rawSim = (colorScore * 0.6 + structScore * 0.4) * 100;
+
+    // Map score to realistic biometric ranges
+    const similarity = colorDist > 45 || pixelDiff > 0.25
+      ? Math.min(52.0, Math.max(36.0, rawSim * 0.7))
+      : Math.min(98.5, Math.max(86.0, rawSim));
+
+    const mismatch = similarity < 70;
+
+    return { similarity, mismatch };
   }
 
   /**
    * Full-document 360° rotational scan: scans the ENTIRE document image across all 4 orientations (0°, 90°, 180°, 270°).
    * Locates, uprights, and extracts the real portrait face. Returns null if no face is present.
+   * Throws an error on corrupt, truncated, or sub-100px images.
    */
   private static async extractFaceFromImage(buffer: Buffer): Promise<{ faceUrl: string | null; rotationDetected: number; uprightedDocUrl?: string }> {
     const uploadsDir = path.join(process.cwd(), 'uploads');
@@ -259,8 +268,11 @@ export class FaceVerificationService {
       fs.mkdirSync(uploadsDir, { recursive: true });
     }
 
+    const isDemoMode = process.env.DEMO_MODE === 'true';
     const isSvg = this.isSvgBuffer(buffer);
-    if (isSvg) {
+
+    // Only allow SVG specimen shortcuts in demo mode
+    if (isSvg && isDemoMode) {
       const bufferStr = buffer.toString('utf-8');
       if (
         bufferStr.includes('SUBSTITUTED PORTRAIT') ||
@@ -273,7 +285,16 @@ export class FaceVerificationService {
       if (bufferStr.includes('ANANYA') || bufferStr.includes('P94821037') || bufferStr.includes('photo-box')) {
         return { faceUrl: '/assets/specimens/extracted_face_genuine.png', rotationDetected: 0 };
       }
-      return { faceUrl: null, rotationDetected: 0 };
+    }
+
+    // Convert to raster buffer and validate image metadata & minimum dimensions
+    const rasterBuf = isSvg
+      ? await sharp(buffer).png().toBuffer()
+      : buffer;
+
+    const initialMeta = await sharp(rasterBuf).metadata();
+    if (!initialMeta.width || !initialMeta.height || initialMeta.width < 100 || initialMeta.height < 100) {
+      throw new Error(`Image dimensions ${initialMeta.width || 0}x${initialMeta.height || 0} are insufficient (minimum 100x100 required for facial verification)`);
     }
 
     // Save temporary raster image for full-document scanner
@@ -282,7 +303,7 @@ export class FaceVerificationService {
 
     try {
       // Ensure image is converted to standard raster JPEG for analysis
-      await sharp(buffer).jpeg({ quality: 95 }).toFile(tempFilePath);
+      await sharp(rasterBuf).jpeg({ quality: 95 }).toFile(tempFilePath);
 
       // Method 1: Execute Python OpenCV Full-Document 4-Orientation Face & Skin Scanner
       const pythonScript = path.join(process.cwd(), 'scripts', 'face_extractor.py');
@@ -315,8 +336,8 @@ export class FaceVerificationService {
       const image = sharp(tempFilePath);
       const metadata = await image.metadata();
 
-      if (!metadata.width || !metadata.height) {
-        return { faceUrl: null, rotationDetected: 0 };
+      if (!metadata.width || !metadata.height || metadata.width < 100 || metadata.height < 100) {
+        throw new Error(`Temporary image dimensions invalid: ${metadata.width || 0}x${metadata.height || 0}`);
       }
 
       const w = metadata.width;
@@ -384,9 +405,6 @@ export class FaceVerificationService {
       }
 
       // No face detected in any quadrant
-      return { faceUrl: null, rotationDetected: 0 };
-    } catch (e: any) {
-      console.warn('[FaceVerificationService] extraction error:', e.message);
       return { faceUrl: null, rotationDetected: 0 };
     } finally {
       // Clean up temporary scan file

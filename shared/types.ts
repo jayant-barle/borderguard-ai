@@ -149,8 +149,9 @@ export interface TamperingIndicator {
 }
 
 export interface TamperingResult {
+  status?: 'PASSED' | 'FAILED' | 'ERROR';
   detected: boolean;
-  confidence: number;
+  confidence: number | null;
   type: 'NONE' | 'PHOTO_REPLACEMENT' | 'TEXT_ALTERATION' | 'SPECIMEN_FORGERY';
   indicators: TamperingIndicator[];
   summary: string;
@@ -158,9 +159,10 @@ export interface TamperingResult {
 }
 
 export interface FaceVerificationResult {
-  consistency: 'LIKELY_MATCH' | 'POSSIBLE_MISMATCH' | 'DEFINITE_MISMATCH' | 'NO_FACE_DETECTED';
-  similarityScore: number; // 0-100
-  confidence: number;
+  status?: 'PASSED' | 'FAILED' | 'ERROR';
+  consistency: 'LIKELY_MATCH' | 'POSSIBLE_MISMATCH' | 'DEFINITE_MISMATCH' | 'NO_FACE_DETECTED' | 'ERROR';
+  similarityScore: number | null; // 0-100 or null if analysis failed
+  confidence: number | null;
   extractedFaceUrl?: string;
   databaseFaceUrl?: string;
   landmarksMatch: boolean;

@@ -54,7 +54,16 @@ router.post('/process', authenticateToken, upload.single('document'), async (req
 
   try {
     const documentType: DocumentType = (req.body.documentType as DocumentType) || 'PASSPORT';
-    const explicitScenario = req.body.scenario; // Optional test trigger
+    const isDemoMode = process.env.DEMO_MODE === 'true';
+    let explicitScenario: string | undefined = undefined;
+
+    if (req.body.scenario) {
+      if (isDemoMode) {
+        explicitScenario = req.body.scenario;
+      } else {
+        console.log(`[Security] Client-supplied scenario '${req.body.scenario}' ignored (DEMO_MODE is disabled)`);
+      }
+    }
 
     let imageBuffer: Buffer;
     let imagePath = '';
@@ -162,7 +171,7 @@ router.post('/process', authenticateToken, upload.single('document'), async (req
     }
 
     // Step 7: Dynamic Substrate & Photo Tampering Analysis
-    const isBiometricMismatch = faceVerification.consistency === 'POSSIBLE_MISMATCH' || faceVerification.similarityScore < 60;
+    const isBiometricMismatch = faceVerification.consistency === 'POSSIBLE_MISMATCH' || (faceVerification.similarityScore !== null && faceVerification.similarityScore < 60);
     const tampering = await TamperingService.analyze(imageBuffer, scenarioResult.scenario, isBiometricMismatch);
 
     // Step 8: Multidimensional Risk Calculation Engine
