@@ -13,6 +13,7 @@ import {
   ExplainableWhySuspicious
 } from '../../../shared/types';
 import { db } from '../db/database';
+import { normalizeDateToIso } from './IdentityMatchingService';
 
 export class RiskEngine {
   /**
@@ -128,21 +129,46 @@ export class RiskEngine {
       dbPenalty = 60;
       dbSeverity = 'MEDIUM';
       rationale.push('Document record was not found in the central government registry.');
-    } else if (database.status === 'BLACKLISTED') {
-      dbPenalty = 100;
-      dbSeverity = 'HIGH';
-      rationale.push('🚨 Document or holder is flagged on Interpol / National Blacklist.');
-    } else if (database.status === 'SUSPENDED') {
-      dbPenalty = 70;
-      dbSeverity = 'HIGH';
-      rationale.push('⚠ Document is listed as suspended by issuing authority.');
-    } else if (database.status === 'EXPIRED') {
-      dbPenalty = 50;
-      dbSeverity = 'MEDIUM';
-      rationale.push('Document is recorded as expired in the database.');
     } else {
-      dbPenalty = 2;
-      rationale.push('Central registry confirmed: Record is active with matching holder details.');
+      if (database.status === 'BLACKLISTED') {
+        dbPenalty = 100;
+        rationale.push('🚨 Document or holder is flagged on Interpol / National Blacklist.');
+      } else if (database.status === 'SUSPENDED') {
+        dbPenalty = 70;
+        rationale.push('⚠ Document is listed as suspended by issuing authority.');
+      } else if (database.status === 'EXPIRED') {
+        dbPenalty = 50;
+        rationale.push('Document is recorded as expired in the database.');
+      } else if (database.status === 'PENDING_VERIFICATION') {
+        dbPenalty = 40;
+        rationale.push('Document record is pending verification; manual review required.');
+      } else {
+        dbPenalty = 2;
+        rationale.push('Central registry confirmed: Record is active.');
+      }
+
+      // Check biographical field disparities against authentic registry record
+      if (!database.nameMatch) {
+        dbPenalty += 25;
+        rationale.push('Identity disparity: Extracted holder name does not match registry record.');
+      }
+      if (!database.dobMatch) {
+        dbPenalty += 30;
+        rationale.push('Identity disparity: Date of birth does not match registry record.');
+      }
+      if (!database.expiryMatch) {
+        dbPenalty += 20;
+        rationale.push('Identity disparity: Expiry date does not match registry record.');
+      }
+
+      dbPenalty = Math.min(100, dbPenalty);
+      if (dbPenalty >= 60) {
+        dbSeverity = 'HIGH';
+      } else if (dbPenalty >= 30) {
+        dbSeverity = 'MEDIUM';
+      } else {
+        dbSeverity = 'LOW';
+      }
     }
     factors.push({
       id: 'FACTOR_DATABASE',
@@ -184,11 +210,29 @@ export class RiskEngine {
     // 5. Document Field Validation Factor
     let docValidPenalty = 0;
     let docSeverity: 'LOW' | 'MEDIUM' | 'HIGH' = 'LOW';
-    const isDocExpired = new Date(ocr.fields.expiryDate.value) < new Date();
+    const isoExpiry = normalizeDateToIso(ocr.fields?.expiryDate?.value);
+    let isDocExpired = false;
+    let isExpiryUnparseable = false;
+
+    if (!isoExpiry) {
+      isExpiryUnparseable = true;
+    } else {
+      const expDate = new Date(isoExpiry);
+      if (isNaN(expDate.getTime())) {
+        isExpiryUnparseable = true;
+      } else {
+        isDocExpired = expDate < new Date();
+      }
+    }
+
     if (isDocExpired) {
       docValidPenalty = 60;
       docSeverity = 'HIGH';
       rationale.push('Document has passed its expiration date.');
+    } else if (isExpiryUnparseable) {
+      docValidPenalty = 40;
+      docSeverity = 'MEDIUM';
+      rationale.push('Document expiry date is missing or unparseable; manual review required.');
     } else if (ocr.confidence < 80) {
       docValidPenalty = 25;
       docSeverity = 'MEDIUM';
@@ -204,7 +248,11 @@ export class RiskEngine {
       weight: config.docValidWeight,
       penaltyScore: docValidPenalty,
       contribution: Number(((docValidPenalty * config.docValidWeight) / 100).toFixed(1)),
-      description: isDocExpired ? 'Document is expired.' : 'Biographical fields are structurally valid.',
+      description: isDocExpired
+        ? 'Document is expired.'
+        : isExpiryUnparseable
+        ? 'Expiry date is unverified or missing.'
+        : 'Biographical fields are structurally valid.',
       severity: docSeverity
     });
 

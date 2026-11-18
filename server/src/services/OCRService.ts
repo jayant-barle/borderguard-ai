@@ -1,7 +1,7 @@
 import sharp from 'sharp';
 import { createWorker } from 'tesseract.js';
 import { OCRResult } from '../../../shared/types';
-import { DemoScenario } from './DemoScenarioService';
+import { DemoScenario, DemoScenarioService } from './DemoScenarioService';
 import { OllamaService } from './OllamaService';
 
 export class OCRService {
@@ -14,11 +14,16 @@ export class OCRService {
     rawFileName?: string
   ): Promise<OCRResult> {
     const isSvg = this.isSvgBuffer(buffer);
+    const isDemoMode = process.env.DEMO_MODE === 'true';
+    const isBundledSpecimen = isDemoMode && (
+      DemoScenarioService.isGenuineSpecimen(buffer) ||
+      DemoScenarioService.isTamperedSpecimen(buffer)
+    );
 
     // 1. If exact pre-packaged demo specimen SVG/asset
     if (isSvg) {
       const svgString = buffer.toString('utf-8');
-      const svgExtracted = this.extractFromSvgText(svgString);
+      const svgExtracted = this.extractFromSvgText(svgString, isBundledSpecimen);
       if (svgExtracted) {
         return svgExtracted;
       }
@@ -64,7 +69,7 @@ export class OCRService {
   /**
    * Extract structured fields from SVG text elements
    */
-  private static extractFromSvgText(svgContent: string): OCRResult | null {
+  private static extractFromSvgText(svgContent: string, isBundledSpecimen: boolean = false): OCRResult | null {
     try {
       const surnameMatch = svgContent.match(/Surname(?:\s*\/\s*Nom)?:\s*([A-Z\s]+)/i) ||
         svgContent.match(/SURNAME\s*\/\s*NOM<\/text>\s*<text[^>]*>([A-Z\s]+)<\/text>/i) ||
@@ -107,16 +112,30 @@ export class OCRService {
       if (mrz1) mrzLines.push(mrz1);
       if (mrz2) mrzLines.push(mrz2);
 
-      const surname = surnameMatch ? surnameMatch[1].trim() : 'VERMA';
-      const given = givenMatch ? givenMatch[1].trim() : 'ANANYA';
-      const fullName = `${given} ${surname}`.trim();
-      const docNum = docNumMatch ? docNumMatch[1].trim() : 'P94821037';
-      const nationality = natMatch ? natMatch[1].trim() : 'INDIAN';
-      const countryCode = countryMatch ? countryMatch[1].trim() : 'IND';
-      const gender = sexMatch ? sexMatch[1].trim() : 'F';
-      const dob = this.normalizeDate(dobMatch ? dobMatch[1].trim() : '18/06/1994', '1994-06-18');
-      const issueDate = this.normalizeDate(issueMatch ? issueMatch[1].trim() : '12/04/2021', '2021-04-12');
-      const expiryDate = this.normalizeDate(expMatch ? expMatch[1].trim() : '11/04/2031', '2031-04-11');
+      const defaultSurname = isBundledSpecimen ? 'VERMA' : '';
+      const defaultGiven = isBundledSpecimen ? 'ANANYA' : '';
+      const defaultDocNum = isBundledSpecimen ? 'P94821037' : '';
+      const defaultNat = isBundledSpecimen ? 'INDIAN' : '';
+      const defaultCountry = isBundledSpecimen ? 'IND' : '';
+      const defaultSex = isBundledSpecimen ? 'F' : 'X';
+      const defaultDob = isBundledSpecimen ? '1994-06-18' : '';
+      const defaultIssue = isBundledSpecimen ? '2021-04-12' : '';
+      const defaultExp = isBundledSpecimen ? '2031-04-11' : '';
+
+      const surname = surnameMatch ? surnameMatch[1].trim() : defaultSurname;
+      const given = givenMatch ? givenMatch[1].trim() : defaultGiven;
+      const fullName = (surname && given ? `${given} ${surname}` : (given || surname)).trim();
+      const docNum = docNumMatch ? docNumMatch[1].trim() : defaultDocNum;
+      const nationality = natMatch ? natMatch[1].trim() : defaultNat;
+      const countryCode = countryMatch ? countryMatch[1].trim() : defaultCountry;
+      const gender = sexMatch ? sexMatch[1].trim() : defaultSex;
+      const dob = this.normalizeDate(dobMatch ? dobMatch[1].trim() : defaultDob, defaultDob);
+      const issueDate = this.normalizeDate(issueMatch ? issueMatch[1].trim() : defaultIssue, defaultIssue);
+      const expiryDate = this.normalizeDate(expMatch ? expMatch[1].trim() : defaultExp, defaultExp);
+
+      if (!fullName && !docNum && mrzLines.length === 0) {
+        return null;
+      }
 
       const rawLines = [
         `REPUBLIC OF INDIA / RÉPUBLIQUE D'INDE`,
@@ -134,7 +153,7 @@ export class OCRService {
       }
 
       return {
-        confidence: 98.6,
+        confidence: isBundledSpecimen ? 98.6 : 94.0,
         rawText: rawLines.join('\n'),
         mrzLines: mrzLines.length > 0 ? mrzLines : undefined,
         fields: {
@@ -142,57 +161,57 @@ export class OCRService {
             name: 'fullName',
             label: 'Full Name',
             value: fullName,
-            confidence: 99.4,
-            validated: true
+            confidence: fullName ? (isBundledSpecimen ? 99.4 : 95.0) : 0,
+            validated: !!fullName
           },
           documentNumber: {
             name: 'documentNumber',
             label: 'Passport Number',
             value: docNum,
-            confidence: 99.8,
-            validated: true
+            confidence: docNum ? (isBundledSpecimen ? 99.8 : 95.0) : 0,
+            validated: !!docNum
           },
           countryCode: {
             name: 'countryCode',
             label: 'Country Code',
             value: countryCode,
-            confidence: 99.5,
-            validated: true
+            confidence: countryCode ? (isBundledSpecimen ? 99.5 : 90.0) : 0,
+            validated: !!countryCode
           },
           nationality: {
             name: 'nationality',
             label: 'Nationality',
             value: nationality,
-            confidence: 98.9,
-            validated: true
+            confidence: nationality ? (isBundledSpecimen ? 98.9 : 90.0) : 0,
+            validated: !!nationality
           },
           dateOfBirth: {
             name: 'dateOfBirth',
             label: 'Date of Birth',
             value: dob,
-            confidence: 98.2,
-            validated: true
+            confidence: dob ? (isBundledSpecimen ? 98.2 : 90.0) : 0,
+            validated: !!dob
           },
           gender: {
             name: 'gender',
             label: 'Gender',
             value: gender,
-            confidence: 99.1,
-            validated: true
+            confidence: gender ? (isBundledSpecimen ? 99.1 : 90.0) : 0,
+            validated: !!gender
           },
           issueDate: {
             name: 'issueDate',
             label: 'Date of Issue',
             value: issueDate,
-            confidence: 97.4,
-            validated: true
+            confidence: issueDate ? (isBundledSpecimen ? 98.4 : 90.0) : 0,
+            validated: !!issueDate
           },
           expiryDate: {
             name: 'expiryDate',
             label: 'Date of Expiry',
             value: expiryDate,
-            confidence: 98.5,
-            validated: true
+            confidence: expiryDate ? (isBundledSpecimen ? 98.7 : 90.0) : 0,
+            validated: !!expiryDate
           }
         }
       };
@@ -300,73 +319,67 @@ Return ONLY valid JSON matching this schema:
         return null;
       }
 
-      const isDemo = parsed.fullName?.includes('VERMA') || parsed.documentNumber === 'P94821037';
-      const defaultName = isDemo ? 'ANANYA VERMA' : (cleanName || 'TRAVELER');
-      const defaultDoc = isDemo ? 'P94821037' : (cleanDocNum || `DOC-${Math.floor(10000000 + Math.random() * 90000000)}`);
-      const defaultDob = isDemo ? '1994-06-18' : '1990-01-01';
-      const defaultIssue = isDemo ? '2021-04-12' : '2022-01-01';
-      const defaultExp = isDemo ? '2031-04-11' : '2032-01-01';
-      const conf = typeof parsed.confidence === 'number' ? Math.min(99, Math.max(70, parsed.confidence)) : 94.0;
+      const conf = typeof parsed.confidence === 'number' ? Math.min(99, Math.max(50, parsed.confidence)) : 85.0;
 
       return {
         confidence: conf,
-        rawText: parsed.rawText || `HOLDER: ${cleanName || defaultName}\nDOC NO: ${cleanDocNum || defaultDoc}\nNATIONALITY: ${rawNationality}`,
+        rawText: parsed.rawText || `HOLDER: ${cleanName}\nDOC NO: ${cleanDocNum}\nNATIONALITY: ${rawNationality}`,
         mrzLines: mrzLines.length > 0 ? mrzLines : undefined,
         fields: {
           fullName: {
             name: 'fullName',
             label: 'Full Name',
-            value: cleanName || defaultName,
-            confidence: conf,
+            value: cleanName,
+            confidence: cleanName ? conf : 0,
             validated: !!cleanName
           },
           documentNumber: {
             name: 'documentNumber',
             label: 'Passport Number',
-            value: cleanDocNum || defaultDoc,
-            confidence: conf,
+            value: cleanDocNum,
+            confidence: cleanDocNum ? conf : 0,
             validated: !!cleanDocNum
           },
           countryCode: {
             name: 'countryCode',
             label: 'Country Code',
-            value: (rawCountry || 'IND').toUpperCase().slice(0, 3),
-            confidence: conf,
-            validated: true
+            value: rawCountry ? rawCountry.toUpperCase().slice(0, 3) : '',
+            confidence: rawCountry ? conf : 0,
+            validated: !!rawCountry
           },
           nationality: {
             name: 'nationality',
             label: 'Nationality',
-            value: (rawNationality || 'INDIAN').toUpperCase(),
-            confidence: conf,
-            validated: true
+            value: rawNationality ? rawNationality.toUpperCase() : '',
+            confidence: rawNationality ? conf : 0,
+            validated: !!rawNationality
           },
           dateOfBirth: {
             name: 'dateOfBirth',
             label: 'Date of Birth',
-            value: this.normalizeDate(rawDob, defaultDob),
-            confidence: conf,
+            value: rawDob ? this.normalizeDate(rawDob, '') : '',
+            confidence: rawDob ? conf : 0,
             validated: !!rawDob
           },
           gender: {
             name: 'gender',
             label: 'Gender',
-            value: (rawGender || 'F').toUpperCase().slice(0, 1),
-            confidence: conf,
-            validated: true
+            value: rawGender ? rawGender.toUpperCase().slice(0, 1) : 'X',
+            confidence: rawGender ? conf : 0,
+            validated: !!rawGender
           },
           issueDate: {
             name: 'issueDate',
             label: 'Date of Issue',
-            value: this.normalizeDate(rawIssueDate, defaultIssue),
-            confidence: conf,
+            value: rawIssueDate ? this.normalizeDate(rawIssueDate, '') : '',
+            confidence: rawIssueDate ? conf : 0,
             validated: !!rawIssueDate
           },
           expiryDate: {
             name: 'expiryDate',
             label: 'Date of Expiry',
-            value: this.normalizeDate(rawExpiryDate, defaultExp),
-            confidence: conf,
+            value: rawExpiryDate ? this.normalizeDate(rawExpiryDate, '') : '',
+            confidence: rawExpiryDate ? conf : 0,
             validated: !!rawExpiryDate
           }
         }
@@ -449,10 +462,10 @@ Return ONLY valid JSON matching this schema:
         if (m2.length >= 28) {
           mrzDocNum = m2.substring(0, 9).replace(/</g, '');
           const dobPart = m2.substring(13, 19);
-          mrzGender = m2.substring(20, 21).replace(/[^MF]/g, 'F');
+          mrzGender = m2.substring(20, 21).replace(/[^MF]/g, 'X');
           const expPart = m2.substring(21, 27);
-          mrzDob = this.normalizeDate(dobPart, '1994-06-18');
-          mrzExpiry = this.normalizeDate(expPart, '2031-04-11');
+          mrzDob = this.normalizeDate(dobPart, '');
+          mrzExpiry = this.normalizeDate(expPart, '');
         }
       }
 
@@ -469,15 +482,19 @@ Return ONLY valid JSON matching this schema:
 
       const surname = mrzSurname || (surnameMatch ? surnameMatch[1].trim().toUpperCase() : '');
       const given = mrzGiven || (givenMatch ? givenMatch[1].trim().toUpperCase() : '');
-      const hasExtractedName = surname || given;
-      const fullName = surname && given ? `${given} ${surname}` : (hasExtractedName || 'TRAVELER');
-      const documentNumber = mrzDocNum || (docMatch ? docMatch[1].trim().toUpperCase() : `DOC-${Math.floor(10000000 + Math.random() * 90000000)}`);
-      const countryCode = mrzCountry || (rawText.includes('IND') ? 'IND' : 'IND');
-      const nationality = natMatch ? natMatch[1].trim().toUpperCase() : 'INDIAN';
-      const dateOfBirth = mrzDob || this.normalizeDate(dobMatch ? dobMatch[1] : undefined, '1990-01-01');
-      const expiryDate = mrzExpiry || this.normalizeDate(expMatch ? expMatch[1] : undefined, '2032-01-01');
-      const issueDate = this.normalizeDate(issueMatch ? issueMatch[1] : undefined, '2022-01-01');
-      const gender = mrzGender || (sexMatch ? sexMatch[1].trim().toUpperCase() : 'F');
+      const hasExtractedName = surname && given ? `${given} ${surname}` : (surname || given);
+      const fullName = hasExtractedName || '';
+      const documentNumber = mrzDocNum || (docMatch ? docMatch[1].trim().toUpperCase() : '');
+      const countryCode = mrzCountry || (rawText.includes('IND') ? 'IND' : '');
+      const nationality = natMatch ? natMatch[1].trim().toUpperCase() : '';
+      const dateOfBirth = mrzDob || this.normalizeDate(dobMatch ? dobMatch[1] : undefined, '');
+      const expiryDate = mrzExpiry || this.normalizeDate(expMatch ? expMatch[1] : undefined, '');
+      const issueDate = this.normalizeDate(issueMatch ? issueMatch[1] : undefined, '');
+      const gender = mrzGender || (sexMatch ? sexMatch[1].trim().toUpperCase() : 'X');
+
+      if (!fullName && !documentNumber && mrzLines.length === 0) {
+        return null;
+      }
 
       return {
         confidence: 91.5,
@@ -488,57 +505,57 @@ Return ONLY valid JSON matching this schema:
             name: 'fullName',
             label: 'Full Name',
             value: fullName,
-            confidence: 92.0,
-            validated: true
+            confidence: fullName ? 92.0 : 0,
+            validated: !!fullName
           },
           documentNumber: {
             name: 'documentNumber',
             label: 'Passport Number',
             value: documentNumber,
-            confidence: 94.0,
-            validated: true
+            confidence: documentNumber ? 94.0 : 0,
+            validated: !!documentNumber
           },
           countryCode: {
             name: 'countryCode',
             label: 'Country Code',
             value: countryCode,
-            confidence: 90.0,
-            validated: true
+            confidence: countryCode ? 90.0 : 0,
+            validated: !!countryCode
           },
           nationality: {
             name: 'nationality',
             label: 'Nationality',
             value: nationality,
-            confidence: 88.0,
-            validated: true
+            confidence: nationality ? 88.0 : 0,
+            validated: !!nationality
           },
           dateOfBirth: {
             name: 'dateOfBirth',
             label: 'Date of Birth',
             value: dateOfBirth,
-            confidence: 89.0,
-            validated: true
+            confidence: dateOfBirth ? 89.0 : 0,
+            validated: !!dateOfBirth
           },
           gender: {
             name: 'gender',
             label: 'Gender',
             value: gender,
-            confidence: 90.0,
-            validated: true
+            confidence: gender !== 'X' ? 90.0 : 0,
+            validated: gender !== 'X'
           },
           issueDate: {
             name: 'issueDate',
             label: 'Date of Issue',
             value: issueDate,
-            confidence: 87.0,
-            validated: true
+            confidence: issueDate ? 87.0 : 0,
+            validated: !!issueDate
           },
           expiryDate: {
             name: 'expiryDate',
             label: 'Date of Expiry',
             value: expiryDate,
-            confidence: 91.0,
-            validated: true
+            confidence: expiryDate ? 91.0 : 0,
+            validated: !!expiryDate
           }
         }
       };
@@ -552,75 +569,64 @@ Return ONLY valid JSON matching this schema:
    * Safe clean fallback when all OCR attempts yield empty text
    */
   private static getCleanDefaultResult(filename?: string): OCRResult {
-    let derivedName = '';
-    if (filename) {
-      const cleanName = filename.replace(/\.[^/.]+$/, '').replace(/[_\-\d]/g, ' ').trim();
-      if (cleanName.length > 3 && !cleanName.toLowerCase().includes('specimen') && !cleanName.toLowerCase().includes('passport') && !cleanName.toLowerCase().includes('camera') && !cleanName.toLowerCase().includes('doc')) {
-        derivedName = cleanName.toUpperCase();
-      }
-    }
-
-    const fullName = derivedName || 'TRAVELER';
-    const documentNumber = `DOC-${Math.floor(10000000 + Math.random() * 90000000)}`;
-
     return {
-      confidence: 75.0,
-      rawText: `DOCUMENT INSPECTION\nDOC NO: ${documentNumber}\nHolder: ${fullName}`,
+      confidence: 0,
+      rawText: '',
       fields: {
         fullName: {
           name: 'fullName',
           label: 'Full Name',
-          value: fullName,
-          confidence: 75.0,
+          value: '',
+          confidence: 0,
           validated: false
         },
         documentNumber: {
           name: 'documentNumber',
           label: 'Document Number',
-          value: documentNumber,
-          confidence: 75.0,
+          value: '',
+          confidence: 0,
           validated: false
         },
         countryCode: {
           name: 'countryCode',
           label: 'Country Code',
-          value: 'IND',
-          confidence: 75.0,
+          value: '',
+          confidence: 0,
           validated: false
         },
         nationality: {
           name: 'nationality',
           label: 'Nationality',
-          value: 'INDIAN',
-          confidence: 75.0,
+          value: '',
+          confidence: 0,
           validated: false
         },
         dateOfBirth: {
           name: 'dateOfBirth',
           label: 'Date of Birth',
-          value: '1994-06-18',
-          confidence: 75.0,
+          value: '',
+          confidence: 0,
           validated: false
         },
         gender: {
           name: 'gender',
           label: 'Gender',
-          value: 'F',
-          confidence: 75.0,
+          value: 'X',
+          confidence: 0,
           validated: false
         },
         issueDate: {
           name: 'issueDate',
           label: 'Date of Issue',
-          value: '2021-04-12',
-          confidence: 75.0,
+          value: '',
+          confidence: 0,
           validated: false
         },
         expiryDate: {
           name: 'expiryDate',
           label: 'Date of Expiry',
-          value: '2031-04-11',
-          confidence: 75.0,
+          value: '',
+          confidence: 0,
           validated: false
         }
       }
