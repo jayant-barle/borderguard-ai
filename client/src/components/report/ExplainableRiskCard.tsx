@@ -125,12 +125,16 @@ export const ExplainableRiskCard: React.FC<ExplainableRiskCardProps> = ({ risk }
                     Consistent / Passed Elements
                   </h5>
                   <ul className="space-y-1.5 text-slate-700 text-[11px]">
-                    {risk.whySuspicious.checksPassed.map((chk, i) => (
-                      <li key={i} className="flex items-start">
-                        <span className="text-emerald-600 mr-1.5 font-bold">✓</span>
-                        <span>{chk.replace(/^✓\s*/, '')}</span>
-                      </li>
-                    ))}
+                    {risk.whySuspicious.checksPassed.length > 0 ? (
+                      risk.whySuspicious.checksPassed.map((chk, i) => (
+                        <li key={i} className="flex items-start">
+                          <span className="text-emerald-600 mr-1.5 font-bold">✓</span>
+                          <span>{chk.replace(/^[✓✔]\s*/, '')}</span>
+                        </li>
+                      ))
+                    ) : (
+                      <li className="text-slate-400 italic">No passed baseline checks recorded</li>
+                    )}
                   </ul>
                 </div>
 
@@ -141,12 +145,16 @@ export const ExplainableRiskCard: React.FC<ExplainableRiskCardProps> = ({ risk }
                     Critical Inconsistencies Detected
                   </h5>
                   <ul className="space-y-1.5 text-slate-700 text-[11px]">
-                    {risk.whySuspicious.flagsDetected.map((flg, i) => (
-                      <li key={i} className="flex items-start text-rose-900 font-medium">
-                        <span className="text-rose-600 mr-1.5 font-bold">🚨</span>
-                        <span>{flg.replace(/^🚨\s*/, '')}</span>
-                      </li>
-                    ))}
+                    {risk.whySuspicious.flagsDetected.length > 0 ? (
+                      risk.whySuspicious.flagsDetected.map((flg, i) => (
+                        <li key={i} className="flex items-start text-rose-900 font-medium">
+                          <span className="text-rose-600 mr-1.5 font-bold">🚨</span>
+                          <span>{flg.replace(/^[🚨⚠]\s*/, '')}</span>
+                        </li>
+                      ))
+                    ) : (
+                      <li className="text-slate-400 italic">No anomalies flagged</li>
+                    )}
                   </ul>
                 </div>
               </div>

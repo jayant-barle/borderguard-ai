@@ -43,7 +43,8 @@ export class FaceVerificationService {
           landmarksMatch: true,
           expressionNeutrality: 98.5,
           pitchYawRoll: { pitch: 1.2, yaw: -0.8, roll: 0.4 },
-          summary: 'Facial biometric profile is highly consistent with central database reference. Likely match (94.8% similarity).'
+          summary: 'Facial biometric profile is highly consistent with central database reference. Likely match (94.8% similarity).',
+          evaluated: true
         };
       }
       if (DemoScenarioService.isTamperedSpecimen(buffer)) {
@@ -57,7 +58,8 @@ export class FaceVerificationService {
           landmarksMatch: false,
           expressionNeutrality: 92.0,
           pitchYawRoll: { pitch: 4.1, yaw: -6.3, roll: 2.1 },
-          summary: '⚠ Biometric face verification indicates significant facial mismatch against registered identity photo (43.2% similarity).'
+          summary: '⚠ Biometric face verification indicates significant facial mismatch against registered identity photo (43.2% similarity).',
+          evaluated: true
         };
       }
     }
@@ -79,7 +81,8 @@ export class FaceVerificationService {
           landmarksMatch: false,
           expressionNeutrality: 0.0,
           pitchYawRoll: { pitch: 0.0, yaw: 0.0, roll: 0.0 },
-          summary: '⚠ No portrait photo or facial biometric features detected in any orientation across document substrate.'
+          summary: '⚠ No portrait photo or facial biometric features detected in any orientation across document substrate.',
+          evaluated: true
         };
       }
 
@@ -107,7 +110,8 @@ export class FaceVerificationService {
               pitchYawRoll: { pitch: 3.2, yaw: -4.1, roll: 1.8 },
               rotationDetected: faceExtraction.rotationDetected,
               uprightedDocUrl: faceExtraction.uprightedDocUrl,
-              summary: `⚠ Biometric face verification indicates significant facial mismatch against registered identity photo (${biometricScore.similarity.toFixed(1)}% similarity).`
+              summary: `⚠ Biometric face verification indicates significant facial mismatch against registered identity photo (${biometricScore.similarity.toFixed(1)}% similarity).`,
+              evaluated: true
             };
           }
 
@@ -123,25 +127,27 @@ export class FaceVerificationService {
             pitchYawRoll: { pitch: 0.8, yaw: 0.2, roll: 0.1 },
             rotationDetected: faceExtraction.rotationDetected,
             uprightedDocUrl: faceExtraction.uprightedDocUrl,
-            summary: `Facial portrait successfully located across document (at ${faceExtraction.rotationDetected}° rotation) and verified against central identity registry (${biometricScore.similarity.toFixed(1)}% similarity).`
+            summary: `Facial portrait successfully located across document (at ${faceExtraction.rotationDetected}° rotation) and verified against central identity registry (${biometricScore.similarity.toFixed(1)}% similarity).`,
+            evaluated: true
           };
         }
       }
 
-      // Scenario: Face detected on newly scanned document (No central database reference yet)
+      // Scenario: Face detected on newly scanned document, but NO database reference photo exists
       return {
         status: 'PASSED',
-        consistency: 'LIKELY_MATCH',
-        similarityScore: 88.5,
-        confidence: 88.0,
+        consistency: 'NOT_EVALUATED',
+        similarityScore: null,
+        confidence: null,
         extractedFaceUrl,
         databaseFaceUrl: undefined,
-        landmarksMatch: true,
-        expressionNeutrality: 92.0,
+        landmarksMatch: false,
+        expressionNeutrality: 0.0,
         pitchYawRoll: { pitch: 0.0, yaw: 0.0, roll: 0.0 },
         rotationDetected: faceExtraction.rotationDetected,
         uprightedDocUrl: faceExtraction.uprightedDocUrl,
-        summary: `Facial portrait successfully located and extracted from document (at ${faceExtraction.rotationDetected}° rotation).`
+        summary: 'Portrait face detected on document, but no central registry reference photo is available for biometric comparison.',
+        evaluated: false
       };
     } catch (err: any) {
       console.warn('[FaceVerificationService] Face verification error (failing closed):', err.message);
@@ -155,7 +161,8 @@ export class FaceVerificationService {
         landmarksMatch: false,
         expressionNeutrality: 0.0,
         pitchYawRoll: { pitch: 0.0, yaw: 0.0, roll: 0.0 },
-        summary: `Facial biometric verification failed: ${err.message || 'Image processing error'}`
+        summary: `Facial biometric verification failed: ${err.message || 'Image processing error'}`,
+        evaluated: false
       };
     }
   }
@@ -247,11 +254,8 @@ export class FaceVerificationService {
     const structScore = Math.max(0, 1 - pixelDiff * 1.6);
     const rawSim = (colorScore * 0.6 + structScore * 0.4) * 100;
 
-    // Map score to realistic biometric ranges
-    const similarity = colorDist > 45 || pixelDiff > 0.25
-      ? Math.min(52.0, Math.max(36.0, rawSim * 0.7))
-      : Math.min(98.5, Math.max(86.0, rawSim));
-
+    // Compute similarity score directly from measured color and structural correlations
+    const similarity = Math.min(100.0, Math.max(0.0, Number(rawSim.toFixed(1))));
     const mismatch = similarity < 70;
 
     return { similarity, mismatch };

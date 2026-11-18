@@ -31,7 +31,6 @@ export class RiskEngine {
         qualityWeight: 5,
         lowThreshold: 30,
         mediumThreshold: 60,
-        highThreshold: 100,
         updatedAt: new Date().toISOString()
       };
     }
@@ -46,7 +45,6 @@ export class RiskEngine {
       qualityWeight: row.quality_weight,
       lowThreshold: row.low_threshold,
       mediumThreshold: row.medium_threshold,
-      highThreshold: row.high_threshold,
       updatedAt: row.updated_at,
       updatedBy: row.updated_by
     };
@@ -100,6 +98,10 @@ export class RiskEngine {
       facePenalty = 95;
       faceSeverity = 'HIGH';
       rationale.push('Face verification module encountered an error (failing closed).');
+    } else if (face.consistency === 'NOT_EVALUATED' || face.evaluated === false) {
+      facePenalty = 50;
+      faceSeverity = 'MEDIUM';
+      rationale.push('Facial biometric verification not evaluated (no central registry reference photo).');
     } else if (face.consistency === 'POSSIBLE_MISMATCH' || (face.similarityScore !== null && face.similarityScore < 60)) {
       facePenalty = 95;
       faceSeverity = 'HIGH';
@@ -118,9 +120,6 @@ export class RiskEngine {
       description: face.summary,
       severity: faceSeverity
     });
-
-    // When severe tampering is detected with face mismatch, calculate identity substitution penalty
-    const isPhotoReplacement = tampering.detected && (face.consistency === 'POSSIBLE_MISMATCH' || (face.similarityScore !== null && face.similarityScore < 60));
 
     // 3. Database Verification Factor
     let dbPenalty = 0;
@@ -233,83 +232,119 @@ export class RiskEngine {
       severity: qualitySeverity
     });
 
-    // Calculate total weighted score
+    // Calculate total weighted score (pure sum of factor contributions, clamped to 0-100)
     const baseScore = factors.reduce((sum, f) => sum + f.contribution, 0);
-    const totalScore = isPhotoReplacement
-      ? Math.min(95, Math.max(88, Math.round(baseScore + 32)))
-      : Math.min(100, Math.max(0, Math.round(baseScore)));
+    const totalScore = Math.min(100, Math.max(0, Math.round(baseScore)));
 
     // Determine Risk Level & Final Status based on thresholds
+    // LOW if score < lowThreshold; MEDIUM if lowThreshold <= score < mediumThreshold; HIGH if score >= mediumThreshold
     let level: RiskLevel = 'LOW';
     let status: FinalStatus = 'VERIFIED';
     let recommendedAction = 'LOW RISK — CONTINUE STANDARD VERIFICATION';
 
-    if (totalScore > config.mediumThreshold || tampering.detected || database.status === 'BLACKLISTED') {
+    if (totalScore >= config.mediumThreshold) {
       level = 'HIGH';
       status = 'REQUIRES_MANUAL_REVIEW';
       recommendedAction = 'HIGH RISK — REQUIRES MANUAL REVIEW / SECONDARY INSPECTION';
-    } else if (totalScore > config.lowThreshold) {
+    } else if (totalScore >= config.lowThreshold) {
       level = 'MEDIUM';
       status = 'SUSPICIOUS';
       recommendedAction = 'MEDIUM RISK — OFFICER DISCRETIONARY CHECK RECOMMENDED';
     }
 
-    // Fail closed: If tampering or face status is ERROR, force REQUIRES_MANUAL_REVIEW and add rationale naming the module
-    if (tampering.status === 'ERROR' || face.status === 'ERROR') {
-      status = 'REQUIRES_MANUAL_REVIEW';
+    // Hard overrides: force HIGH risk and REQUIRES_MANUAL_REVIEW regardless of score
+    const isTamperingConfirmed = tampering.detected === true;
+    const isBlacklisted = database.status === 'BLACKLISTED';
+    const isMrzChecksumFailure = mrz.overallStatus === 'FAILED' && (mrz.checksums ? mrz.checksums.some((c) => !c.valid) : true);
+    const isIdentityMismatch = database.recordFound && (!database.nameMatch || !database.dobMatch);
+    const isForensicError = tampering.status === 'ERROR' || face.status === 'ERROR';
+    const isUnevaluatedFace = face.consistency === 'NOT_EVALUATED' || face.evaluated === false;
+
+    if (
+      isTamperingConfirmed ||
+      isBlacklisted ||
+      isMrzChecksumFailure ||
+      isIdentityMismatch ||
+      isForensicError ||
+      isUnevaluatedFace
+    ) {
       level = 'HIGH';
-      if (tampering.status === 'ERROR') {
-        rationale.push('Forensic failure: TamperingService failed closed with status ERROR (manual review required).');
+      status = 'REQUIRES_MANUAL_REVIEW';
+
+      if (isForensicError) {
+        if (tampering.status === 'ERROR') {
+          rationale.push('Forensic failure: TamperingService failed closed with status ERROR (manual review required).');
+        }
+        if (face.status === 'ERROR') {
+          rationale.push('Forensic failure: FaceVerificationService failed closed with status ERROR (manual review required).');
+        }
+        recommendedAction = 'FORENSIC FAILURE — REQUIRES MANUAL REVIEW / SECONDARY INSPECTION';
+      } else if (isBlacklisted) {
+        recommendedAction = 'SECURITY ALERT — BLACKLISTED IDENTITY (INTERCEPT IMMEDIATELY)';
+      } else if (isTamperingConfirmed) {
+        recommendedAction = 'TAMPERING DETECTED — PHOTO SUBSTITUTION / DIGITAL FORGERY';
+      } else if (isIdentityMismatch) {
+        rationale.push('Identity mismatch: Passenger biographical data does not match central database record.');
+        recommendedAction = 'IDENTITY MISMATCH — HOLDER DETAILS DO NOT MATCH REGISTRY';
+      } else if (isMrzChecksumFailure) {
+        rationale.push('MRZ validation failure: Checksum digits do not match extracted optical character data.');
+        recommendedAction = 'MRZ CHECKSUM FAILED — DOCUMENT INTEGRITY COMPROMISED';
+      } else if (isUnevaluatedFace) {
+        rationale.push('Biometric review required: No reference photo found in central registry for automated face comparison.');
+        recommendedAction = 'BIOMETRIC CHECK PENDING — NO REGISTRY REFERENCE PHOTO AVAILABLE';
       }
-      if (face.status === 'ERROR') {
-        rationale.push('Forensic failure: FaceVerificationService failed closed with status ERROR (manual review required).');
-      }
-      recommendedAction = 'FORENSIC FAILURE — REQUIRES MANUAL REVIEW / SECONDARY INSPECTION';
     }
 
-    // Explainable "Why is this document suspicious?" block for high-risk / tampering cases
+    // Explainable "Why is this document suspicious?" block derived strictly from real measured factors
     let whySuspicious: ExplainableWhySuspicious | undefined;
 
     if (tampering.detected || level === 'HIGH' || status === 'REQUIRES_MANUAL_REVIEW') {
-      const hasForensicError = tampering.status === 'ERROR' || face.status === 'ERROR';
-      const flags: string[] = [];
+      const checksPassed: string[] = [];
+      const flagsDetected: string[] = [];
 
-      if (tampering.status === 'ERROR') {
-        flags.push('🚨 Tampering forensics module encountered an unrecoverable analysis error (failed closed)');
-      } else if (tampering.detected) {
-        flags.push('🚨 Passport photograph exhibits digital insertion and boundary feathering artifacts');
-        flags.push('🚨 JPEG Error Level Analysis reveals compression quantization discontinuity around photo frame');
+      for (const factor of factors) {
+        if (factor.severity === 'LOW') {
+          checksPassed.push(`✓ ${factor.name}: ${factor.description}`);
+        } else {
+          const prefix = factor.severity === 'HIGH' ? '🚨' : '⚠';
+          flagsDetected.push(`${prefix} ${factor.name}: ${factor.description}`);
+        }
       }
 
-      if (face.status === 'ERROR') {
-        flags.push('🚨 Facial biometric verification module encountered an unrecoverable analysis error (failed closed)');
-      } else if (face.consistency === 'POSSIBLE_MISMATCH' || (face.similarityScore !== null && face.similarityScore < 60)) {
-        flags.push(`⚠ Facial biometric verification similarity is ${face.similarityScore}% (Likely face mismatch against central record)`);
+      // Add specific forensic indicator flags if tampering detected
+      if (tampering.detected && tampering.indicators) {
+        for (const ind of tampering.indicators) {
+          if (ind.detected || ind.score > 50) {
+            flagsDetected.push(`🚨 ${ind.name}: ${ind.description}`);
+          }
+        }
       }
 
-      if (isPhotoReplacement) {
-        flags.push('🚨 Identity consistency anomaly: Valid passport shell with substituted photo');
+      const isDemoMode = process.env.DEMO_MODE === 'true';
+      let conclusion: string;
+      if (isForensicError) {
+        conclusion = 'Automated forensic analysis could not verify image integrity (failed closed). Manual secondary inspection is required.';
+      } else if (isDemoMode) {
+        conclusion = 'In DEMO MODE, this scenario simulates a photo replacement attack. While the document number and MRZ data belong to a legitimate traveler, the photograph does not match the registered profile. Manual secondary inspection is required.';
+      } else {
+        const flagCount = flagsDetected.length;
+        conclusion = `Automated screening identified ${flagCount} anomalous signal${flagCount === 1 ? '' : 's'} across biometric, forensic, or database verification checks. Manual secondary inspection is required before clearance.`;
       }
+
+      const investigationGuidance: string[] = [
+        '1. Request physical passport inspection and examine UV substrate under 365nm light.',
+        '2. Verify traveler biometrics against physical document and central registry credentials.',
+        '3. Escalate to Secondary Inspection Officer for manual identity cross-examination.'
+      ];
 
       whySuspicious = {
-        title: hasForensicError ? 'Why is this document flagged for Manual Review?' : 'Why is this document flagged as High Risk?',
-        checksPassed: [
-          '✓ Document number matches registered government database record',
-          '✓ ICAO 9303 MRZ check digits and composite hash are mathematically valid',
-          '✓ Biographical text fields (Name, Nationality, DOB) are consistent with registry',
-          '✓ Optical scan resolution and contrast are sufficient for inspection'
-        ],
-        flagsDetected: flags.length > 0 ? flags : [
-          '🚨 Forensic evaluation failed closed due to image processing anomaly'
-        ],
-        conclusion: hasForensicError
-          ? 'Automated forensic analysis could not verify image integrity (failed closed). Manual secondary inspection is required.'
-          : 'In DEMO MODE, this scenario simulates a photo replacement attack. While the document number and MRZ data belong to a legitimate traveler, the photograph does not match the registered profile. Manual secondary inspection is required.',
-        investigationGuidance: [
-          '1. Request physical passport inspection and examine UV substrate under 365nm light.',
-          '2. Compare live passenger biometric capture against chip data / central repository.',
-          '3. Escalate to Immigration Secondary Review Officer for document forensic verification.'
-        ]
+        title: isForensicError
+          ? 'Why is this document flagged for Manual Review?'
+          : 'Why is this document flagged as High Risk / Suspicious?',
+        checksPassed,
+        flagsDetected,
+        conclusion,
+        investigationGuidance
       };
     }
 

@@ -169,13 +169,12 @@ Analyze the provided document inspection forensic metrics and return ONLY a vali
 - DOB: ${params.ocr.fields.dateOfBirth.value} | Expiry: ${params.ocr.fields.expiryDate.value}
 - Tampering Flagged: ${params.tampering.detected ? 'YES (' + params.tampering.type + ')' : 'NO'}
 - Tampering Summary: ${params.tampering.summary}
-- Face Biometric Similarity: ${params.face.similarityScore !== null ? `${params.face.similarityScore}%` : 'N/A (Analysis Error)'} (${params.face.consistency})
+- Face Biometric Similarity: ${params.face.similarityScore !== null ? `${params.face.similarityScore}%` : 'N/A (Analysis Error or Not Evaluated)'} (${params.face.consistency})
 - Face Summary: ${params.face.summary}
 - MRZ Checksum Status: ${params.mrz.overallStatus} (${params.mrz.checksums.filter((c) => !c.valid).length} invalid checksums)
 - Central Database Match: ${params.database.recordFound ? 'FOUND - ' + params.database.status : 'RECORD_NOT_FOUND'}
 - Blacklist / Watchlist: ${params.database.watchlistFlag ? 'FLAGGED ON WATCHLIST' : 'CLEAR'}
 - Overall Risk Score: ${params.risk.score}/100 (Level: ${params.risk.level}, Status: ${params.risk.status})
-- Scenario: ${params.scenario}
 
 Return the JSON analysis now.`;
 
@@ -426,28 +425,68 @@ ${contextString}`;
     risk: RiskAssessment;
     scenario: string;
   }): AIForensicAnalysis {
-    const isSuspicious = params.risk.level === 'HIGH' || params.tampering.detected;
+    const isError = params.tampering.status === 'ERROR' || params.face.status === 'ERROR';
+    const isSuspicious = params.risk.level === 'HIGH' || params.risk.level === 'MEDIUM' || params.tampering.detected || isError;
 
     if (isSuspicious) {
+      const anomalies: string[] = [];
+      const threats: string[] = [];
+
+      if (params.tampering.status === 'ERROR') {
+        anomalies.push('Automated tampering forensics failed closed due to image parsing error');
+        threats.push('Image data could not be forensically validated');
+      } else if (params.tampering.detected) {
+        anomalies.push(`Optical tampering detected: ${params.tampering.summary}`);
+        threats.push(`Photo tampering / substitution flagged with ${params.tampering.confidence !== null ? `${params.tampering.confidence}%` : 'measured'} confidence`);
+      }
+
+      if (params.face.status === 'ERROR') {
+        anomalies.push('Facial biometric verification failed closed due to image processing error');
+      } else if (params.face.consistency === 'NOT_EVALUATED') {
+        anomalies.push('Facial biometric comparison pending: no central registry photo available');
+      } else if (params.face.consistency === 'POSSIBLE_MISMATCH' || (params.face.similarityScore !== null && params.face.similarityScore < 60)) {
+        anomalies.push(`Biometric facial similarity index is ${params.face.similarityScore}% (Threshold: 60%)`);
+        threats.push('Facial biometric profile diverges significantly from registered reference');
+      }
+
+      if (params.database.status === 'BLACKLISTED') {
+        anomalies.push('Traveler identity flagged on security watchlist / blacklist');
+        threats.push('Subject is actively flagged on enforcement registry');
+      } else if (!params.database.recordFound) {
+        anomalies.push('Unregistered document number in central authority database');
+      }
+
+      if (params.mrz.overallStatus === 'FAILED') {
+        anomalies.push(`ICAO 9303 MRZ checksum failure (${params.mrz.checksums.filter((c) => !c.valid).length} invalid checksums)`);
+        threats.push('Machine-readable zone checksum mismatch');
+      }
+
+      if (anomalies.length === 0) {
+        anomalies.push(...params.risk.rationale);
+      }
+
+      const threatAssessment = threats.length > 0
+        ? threats.join('. ') + '.'
+        : `Elevated risk assessment (Score: ${params.risk.score}/100, Level: ${params.risk.level}). Multiple screening signals require manual inspection.`;
+
+      const executiveSummary = isError
+        ? `Forensic processing anomaly for ${params.holderName} (${params.documentNumber}). Automated checks failed closed and require manual review.`
+        : `Screening alert for ${params.holderName} (${params.documentNumber}). Elevated risk detected across ${anomalies.length} screening factor${anomalies.length === 1 ? '' : 's'}.`;
+
       return {
         model: 'SatyaShield-Heuristic-AI',
         timestamp: new Date().toISOString(),
-        executiveSummary: `High-risk identity screening alert for ${params.holderName} (${params.documentNumber}). Forensic sensors flagged severe document manipulation anomalies.`,
-        threatAssessment: `Critical Photo Replacement Anomaly detected. The physical document passport shell corresponds to a valid registration, but the portrait contains digital boundary artifacts with biometric facial mismatch (${params.face.similarityScore !== null ? `${params.face.similarityScore}%` : 'N/A'} similarity).`,
-        anomalyAnalysis: [
-          'Digital portrait substitution detected along photo boundary perimeter',
-          `Biometric facial similarity index is ${params.face.similarityScore !== null ? `${params.face.similarityScore}%` : 'N/A'} (Threshold: 60%)`,
-          'Error Level Analysis shows compression artifact discrepancy in photo zone',
-          params.database.recordFound ? 'Central registry document record matches metadata but photo hash diverges' : 'Unregistered document number in central authority database'
-        ],
+        executiveSummary,
+        threatAssessment,
+        anomalyAnalysis: anomalies,
         interviewQuestions: [
           'Can you confirm the issuing authority and date when this passport was handed to you?',
           'What is your exact address of residence in your country of citizenship?',
           'Do you have secondary government-issued photo identification (National ID, Driving License)?',
           'What is the precise itinerary and accommodation for your stay?'
         ],
-        recommendedProtocol: 'SECONDARY_INSPECTION_MANDATORY — Escalate to Forensic Inspection Officer with UV 365nm substrate verification.',
-        confidenceScore: 96
+        recommendedProtocol: params.risk.recommendedAction || 'SECONDARY_INSPECTION_MANDATORY',
+        confidenceScore: isError ? 90 : 95
       };
     }
 
@@ -458,7 +497,9 @@ ${contextString}`;
       threatAssessment: 'No forensic tampering, biometric divergence, or watchlist matches detected. Document integrity is verified under ICAO 9303 standards.',
       anomalyAnalysis: [
         'ICAO 9303 MRZ check digits and composite checksum verified mathematically',
-        `Biometric facial verification confirmed with ${params.face.similarityScore !== null ? `${params.face.similarityScore}%` : 'N/A'} facial similarity`,
+        params.face.similarityScore !== null
+          ? `Biometric facial verification confirmed with ${params.face.similarityScore}% facial similarity`
+          : 'Facial profile extracted from document',
         'Document substrate optical resolution and contrast meet high-security thresholds',
         'Central government database record active and verified with no sanctions'
       ],

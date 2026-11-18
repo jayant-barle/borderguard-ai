@@ -18,7 +18,8 @@ export const DocumentPhotoViewer: React.FC<DocumentPhotoViewerProps> = ({
   const [viewRotation, setViewRotation] = useState<number>(0);
   const [viewZoom, setViewZoom] = useState<number>(1);
   const isError = faceVerification.status === 'ERROR' || faceVerification.consistency === 'ERROR';
-  const isMatch = !isError && faceVerification.consistency === 'LIKELY_MATCH';
+  const isNotEvaluated = faceVerification.consistency === 'NOT_EVALUATED' || faceVerification.evaluated === false;
+  const isMatch = !isError && !isNotEvaluated && faceVerification.consistency === 'LIKELY_MATCH';
   const score = faceVerification.similarityScore;
 
   return (
@@ -189,6 +190,8 @@ export const DocumentPhotoViewer: React.FC<DocumentPhotoViewerProps> = ({
                 className={`font-mono ${
                   isError
                     ? 'text-rose-700'
+                    : isNotEvaluated
+                    ? 'text-slate-500'
                     : score !== null && score > 80
                     ? 'text-emerald-700'
                     : score !== null && score > 55
@@ -196,7 +199,7 @@ export const DocumentPhotoViewer: React.FC<DocumentPhotoViewerProps> = ({
                     : 'text-rose-700'
                 }`}
               >
-                {isError ? 'ERROR (N/A)' : `${score}%`}
+                {isError ? 'ERROR (N/A)' : isNotEvaluated ? 'NOT EVALUATED (N/A)' : `${score}%`}
               </span>
             </div>
 
@@ -205,19 +208,23 @@ export const DocumentPhotoViewer: React.FC<DocumentPhotoViewerProps> = ({
                 className={`h-full rounded-full transition-all duration-700 ${
                   isError
                     ? 'bg-rose-500'
+                    : isNotEvaluated
+                    ? 'bg-slate-300'
                     : score !== null && score > 80
                     ? 'bg-emerald-500'
                     : score !== null && score > 55
                     ? 'bg-amber-500'
                     : 'bg-rose-500'
                 }`}
-                style={{ width: isError ? '100%' : `${score || 0}%` }}
+                style={{ width: isError ? '100%' : isNotEvaluated ? '0%' : `${score || 0}%` }}
               />
             </div>
 
             <div className="flex items-center space-x-1.5 pt-1">
               {isError ? (
                 <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+              ) : isNotEvaluated ? (
+                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
               ) : isMatch ? (
                 <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
               ) : (
@@ -225,11 +232,19 @@ export const DocumentPhotoViewer: React.FC<DocumentPhotoViewerProps> = ({
               )}
               <span
                 className={`text-[11px] font-bold ${
-                  isError ? 'text-rose-800' : isMatch ? 'text-emerald-800' : 'text-rose-800'
+                  isError
+                    ? 'text-rose-800'
+                    : isNotEvaluated
+                    ? 'text-amber-800'
+                    : isMatch
+                    ? 'text-emerald-800'
+                    : 'text-rose-800'
                 }`}
               >
                 {isError
                   ? '⚠ Biometric Verification Failed (Manual Review Required)'
+                  : isNotEvaluated
+                  ? '⚠ No Reference Photo in Registry (Manual Review Required)'
                   : isMatch
                   ? 'Likely Match (Verified)'
                   : 'Possible Face Mismatch / Substituted Portrait'}
