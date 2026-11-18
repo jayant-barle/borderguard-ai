@@ -42,11 +42,11 @@ export function initDatabase() {
       document_type TEXT NOT NULL,
       holder_name TEXT NOT NULL,
       nationality TEXT NOT NULL,
-      date_of_birth TEXT NOT NULL,
+      date_of_birth TEXT,
       gender TEXT NOT NULL DEFAULT 'F',
-      issue_date TEXT NOT NULL,
-      expiry_date TEXT NOT NULL,
-      status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK(status IN ('ACTIVE', 'EXPIRED', 'SUSPENDED', 'BLACKLISTED', 'SUSPICIOUS')),
+      issue_date TEXT,
+      expiry_date TEXT,
+      status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK(status IN ('ACTIVE', 'EXPIRED', 'SUSPENDED', 'BLACKLISTED', 'SUSPICIOUS', 'PENDING_VERIFICATION')),
       photo_url TEXT,
       notes TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -114,8 +114,36 @@ export function migrateDatabase() {
       db.exec('ALTER TABLE risk_config DROP COLUMN high_threshold;');
       console.log('[Database] Migrated risk_config table: dropped redundant high_threshold column.');
     }
+
+    const docTable = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='documents'").get() as { sql: string } | undefined;
+    if (docTable && !docTable.sql.includes('PENDING_VERIFICATION')) {
+      db.exec(`
+        PRAGMA foreign_keys = OFF;
+        ALTER TABLE documents RENAME TO documents_old;
+        CREATE TABLE documents (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          document_number TEXT UNIQUE NOT NULL,
+          document_type TEXT NOT NULL,
+          holder_name TEXT NOT NULL,
+          nationality TEXT NOT NULL,
+          date_of_birth TEXT,
+          gender TEXT NOT NULL DEFAULT 'F',
+          issue_date TEXT,
+          expiry_date TEXT,
+          status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK(status IN ('ACTIVE', 'EXPIRED', 'SUSPENDED', 'BLACKLISTED', 'SUSPICIOUS', 'PENDING_VERIFICATION')),
+          photo_url TEXT,
+          notes TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        INSERT INTO documents (id, document_number, document_type, holder_name, nationality, date_of_birth, gender, issue_date, expiry_date, status, photo_url, notes, created_at)
+        SELECT id, document_number, document_type, holder_name, nationality, date_of_birth, gender, issue_date, expiry_date, status, photo_url, notes, created_at FROM documents_old;
+        DROP TABLE documents_old;
+        PRAGMA foreign_keys = ON;
+      `);
+      console.log('[Database] Migrated documents table: added PENDING_VERIFICATION status and nullable dates.');
+    }
   } catch (err: any) {
-    console.warn('[Database] Note on risk_config migration:', err.message);
+    console.warn('[Database] Note on database migration:', err.message);
   }
 }
 

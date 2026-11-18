@@ -39,6 +39,27 @@ router.get('/', authenticateToken, (req: AuthRequest, res: Response) => {
   }
 });
 
+// GET /api/documents/auto-registered (Admin review report for scans saved without verified registry records)
+router.get('/auto-registered', authenticateToken, requireAdmin, (_req: AuthRequest, res: Response) => {
+  try {
+    const rows = db.prepare(`
+      SELECT * FROM documents
+      WHERE notes LIKE 'Auto-registered upon document screening scan%'
+         OR notes LIKE 'Registered in Central Registry upon document screening scan%'
+         OR status = 'PENDING_VERIFICATION'
+      ORDER BY id DESC
+    `).all() as DocumentRecord[];
+
+    return res.json({
+      count: rows.length,
+      documents: rows
+    });
+  } catch (err: any) {
+    console.error('Auto-registered query error:', err);
+    return res.status(500).json({ error: 'Failed to retrieve auto-registered documents.' });
+  }
+});
+
 // POST /api/documents (Admin only)
 router.post('/', authenticateToken, requireAdmin, (req: AuthRequest, res: Response) => {
   try {

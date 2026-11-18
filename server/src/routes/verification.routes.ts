@@ -16,7 +16,7 @@ import { FaceVerificationService } from '../services/FaceVerificationService';
 import { IdentityMatchingService } from '../services/IdentityMatchingService';
 import { RiskEngine } from '../services/RiskEngine';
 import { OllamaService } from '../services/OllamaService';
-import { DocumentType, VerificationResult, AIMode } from '../../../shared/types';
+import { DocumentType, VerificationResult, AIMode, DatabaseVerificationResult } from '../../../shared/types';
 
 const router = Router();
 
@@ -224,42 +224,61 @@ router.post('/process', authenticateToken, handleUpload, async (req: AuthRequest
     const mrz = MRZValidationService.validate(scenarioResult.scenario, ocr, ocr.mrzLines);
 
     // Step 6: Query Central Government Registry (Read-only check against authentic records)
-    const cleanDocNum = (ocr.fields.documentNumber?.value && ocr.fields.documentNumber.value !== 'DOC-UNREAD')
-      ? ocr.fields.documentNumber.value.trim().toUpperCase()
-      : (filename ? filename.replace(/\.[^/.]+$/, '').toUpperCase() : `DOC-${Date.now().toString().slice(-6)}`);
-    const cleanHolderName = (ocr.fields.fullName?.value && ocr.fields.fullName.value !== 'TRAVELER')
-      ? ocr.fields.fullName.value.trim().toUpperCase()
-      : (filename ? filename.replace(/\.[^/.]+$/, '').replace(/[_\-]/g, ' ').toUpperCase() : 'REGISTERED CITIZEN');
-    const cleanNationality = ocr.fields.nationality?.value || 'IND';
-    const cleanDob = ocr.fields.dateOfBirth?.value || '1990-01-01';
-    const cleanGender = ocr.fields.gender?.value || 'F';
-    const cleanIssue = ocr.fields.issueDate?.value || new Date().toISOString().split('T')[0];
-    const cleanExpiry = ocr.fields.expiryDate?.value || '2034-12-31';
+    const extractedDocNum = ocr.fields.documentNumber?.value?.trim().toUpperCase();
+    const hasValidDocNum = !!(extractedDocNum && extractedDocNum !== 'DOC-UNREAD');
 
-    let databaseVerification = IdentityMatchingService.verifyInDatabase(
-      cleanDocNum,
-      cleanHolderName,
-      cleanDob,
-      cleanExpiry
-    );
+    const extractedHolderName = ocr.fields.fullName?.value?.trim().toUpperCase();
+    const cleanHolderName = (extractedHolderName && extractedHolderName !== 'TRAVELER' && extractedHolderName !== 'UNREAD')
+      ? extractedHolderName
+      : '';
+    const cleanNationality = ocr.fields.nationality?.value || '';
+    const cleanDob = ocr.fields.dateOfBirth?.value || '';
+    const cleanGender = ocr.fields.gender?.value || 'X';
+    const cleanIssue = ocr.fields.issueDate?.value || '';
+    const cleanExpiry = ocr.fields.expiryDate?.value || '';
 
-    // If new unsaved document, register initial record in registry
-    if (!databaseVerification.recordFound && scenarioResult.scenario === 'UNKNOWN') {
+    let databaseVerification: DatabaseVerificationResult;
+
+    if (hasValidDocNum) {
+      databaseVerification = IdentityMatchingService.verifyInDatabase(
+        extractedDocNum,
+        cleanHolderName,
+        cleanDob,
+        cleanExpiry
+      );
+    } else {
+      databaseVerification = {
+        recordFound: false,
+        status: 'NOT_FOUND',
+        nameMatch: false,
+        dobMatch: false,
+        expiryMatch: false,
+        multipleIdentityAlert: false,
+        watchlistFlag: false,
+        summary: 'Passport number could not be read by OCR; central registry query skipped (manual review required).'
+      };
+    }
+
+    // Auto-registration of unknown documents is disabled by default (AUTO_REGISTER_UNKNOWN=false)
+    // When enabled, documents are stored strictly as 'PENDING_VERIFICATION' (never ACTIVE) with unread dates as null
+    const autoRegisterUnknown = process.env.AUTO_REGISTER_UNKNOWN === 'true';
+    if (autoRegisterUnknown && hasValidDocNum && !databaseVerification.recordFound && scenarioResult.scenario === 'UNKNOWN') {
       IdentityMatchingService.registerOrUpdateDocument({
-        documentNumber: cleanDocNum,
+        documentNumber: extractedDocNum,
         documentType,
-        holderName: cleanHolderName,
+        holderName: cleanHolderName || 'UNVERIFIED SCAN',
         nationality: cleanNationality,
-        dateOfBirth: cleanDob,
+        dateOfBirth: cleanDob || null,
         gender: cleanGender,
-        issueDate: cleanIssue,
-        expiryDate: cleanExpiry,
+        issueDate: cleanIssue || null,
+        expiryDate: cleanExpiry || null,
+        status: 'PENDING_VERIFICATION',
         photoUrl: faceVerification.extractedFaceUrl || imagePath,
-        notes: `Auto-registered upon document screening scan on ${new Date().toLocaleDateString()}`
+        notes: `Auto-registered upon document screening scan on ${new Date().toLocaleDateString()} (PENDING_VERIFICATION)`
       });
 
       databaseVerification = IdentityMatchingService.verifyInDatabase(
-        cleanDocNum,
+        extractedDocNum,
         cleanHolderName,
         cleanDob,
         cleanExpiry
@@ -321,8 +340,8 @@ router.post('/process', authenticateToken, handleUpload, async (req: AuthRequest
       officerBadge: req.user!.badge_number,
       documentType,
       documentImage: documentImageUrl,
-      documentNumber: ocr.fields.documentNumber.value,
-      holderName: ocr.fields.fullName.value,
+      documentNumber: ocr.fields.documentNumber?.value || '',
+      holderName: ocr.fields.fullName?.value || '',
       aiMode: ollamaAnalysis?.model?.includes('llama') ? 'OLLAMA_AI' : 'HYBRID_AI',
       scenarioDetected: scenarioResult.scenario,
       imageQuality,
