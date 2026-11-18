@@ -1,6 +1,6 @@
 {
   "name": "borderguard-ai",
-  "version": "2.4.0",
+  "version": "2.5.0",
   "description": "AI-Powered Identity & Document Screening for Faster, Safer Verification",
   "main": "server/src/index.ts",
   "scripts": {

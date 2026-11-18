@@ -65,9 +65,12 @@ BorderGuard AI features a dedicated, transparent **AI Engine: Demo Mode** badge 
 ### Scenario 2 — Photo Replacement / Face Mismatch
 - **Holder:** ANANYA VERMA (P94821037)
 - **Signals:** Identical valid document shell and MRZ checksums, but photograph has been digitally substituted with a different subject.
-- **Forensics:** ELA compression discontinuity, edge feathering artifacts, 43.2% facial biometric mismatch.
-- **Result:** `HIGH RISK` (~88–95/100) → **`REQUIRES MANUAL REVIEW`**
-- **Explainable Rationale:** Explains that the database shell and MRZ are authentic, but the altered portrait triggers high-risk identity inconsistency.
+- **Forensics:** Real Error Level Analysis (ELA) compression variance, color temperature warmth differential (+0.38 vs 0.22 threshold), portrait margin gradient anomalies, 43.2% facial biometric mismatch.
+- **Scoring & Classification:**
+  - **Natural Factor Score:** `58/100` (computed strictly from factor contributions: Tampering 28.8 + Face 28.5 + Database 0.3 + MRZ 0.2 + Expiry 0.3 + Quality 0.1).
+  - **Risk Tier:** **`HIGH RISK`** → **`REQUIRES MANUAL REVIEW`** (elevated via automated forensic hard override on confirmed tampering `tampering.detected === true`).
+  > [!NOTE]
+  > Legacy hackathon demos simulated an aggregate score of 88–95 via artificial score clamping. In BorderGuard AI v2.5.0+, the score strictly reflects real factor contributions (`58/100`), while security integrity is guaranteed by the automated fail-closed hard override elevating the tier to `HIGH RISK` and mandating secondary officer inspection.
 
 ---
 
