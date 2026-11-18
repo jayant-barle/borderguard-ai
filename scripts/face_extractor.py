@@ -233,7 +233,7 @@ def scan_and_extract_face(image_path: str, output_dir: str) -> Dict[str, Any]:
 
     return {
         "found": True,
-        "cropUrl": f"/uploads/{out_filename}",
+        "cropUrl": f"/api/verification/image/{out_filename}",
         "confidence": round(min(99.0, max(75.0, best_conf)), 1),
         "box": {"x": int(crop_x), "y": int(crop_y), "width": int(crop_w), "height": int(crop_h)},
         "rotationDetected": 0,

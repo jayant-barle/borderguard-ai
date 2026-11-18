@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { FaceVerificationResult } from '../../../../shared/types';
+import { AuthenticatedImage } from '../ui/AuthenticatedImage';
 import { ScanFace, UserCheck, AlertTriangle, ShieldCheck, RotateCw, RotateCcw, ZoomIn, ZoomOut, RefreshCw } from 'lucide-react';
 
 interface DocumentPhotoViewerProps {
@@ -89,7 +90,7 @@ export const DocumentPhotoViewer: React.FC<DocumentPhotoViewerProps> = ({
             </div>
           </div>
           <div className="rounded-xl border border-slate-200 overflow-hidden bg-slate-950/90 aspect-16/10 flex items-center justify-center p-2 relative shadow-inner">
-            <img
+            <AuthenticatedImage
               src={documentImage}
               alt="Scanned Document"
               className="max-w-full max-h-full object-contain rounded-lg transition-transform duration-200"
@@ -120,7 +121,7 @@ export const DocumentPhotoViewer: React.FC<DocumentPhotoViewerProps> = ({
               <div className="w-full h-44 sm:h-48 rounded-lg overflow-hidden border border-slate-200 bg-slate-900/[0.04] flex items-center justify-center relative p-1.5 shadow-inner">
                 {faceVerification.extractedFaceUrl ? (
                   <>
-                    <img
+                    <AuthenticatedImage
                       src={faceVerification.extractedFaceUrl}
                       alt="Extracted Face"
                       className="w-full h-full object-contain object-center rounded-md"
@@ -156,7 +157,7 @@ export const DocumentPhotoViewer: React.FC<DocumentPhotoViewerProps> = ({
               <div className="w-full h-44 sm:h-48 rounded-lg overflow-hidden border border-slate-200 bg-slate-900/[0.04] flex items-center justify-center relative p-1.5 shadow-inner">
                 {faceVerification.databaseFaceUrl ? (
                   <>
-                    <img
+                    <AuthenticatedImage
                       src={faceVerification.databaseFaceUrl}
                       alt="Database Reference Photo"
                       className="w-full h-full object-contain object-center rounded-md"

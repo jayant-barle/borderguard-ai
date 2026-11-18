@@ -185,7 +185,8 @@ export class FaceVerificationService {
     const candidates = [
       path.join(process.cwd(), cleanUrl),
       path.join(process.cwd(), 'assets', cleanUrl.replace(/^assets\//, '')),
-      path.join(process.cwd(), 'uploads', cleanUrl.replace(/^uploads\//, ''))
+      path.join(process.cwd(), 'uploads', cleanUrl.replace(/^uploads\//, '')),
+      path.join(process.cwd(), 'uploads', path.basename(cleanUrl))
     ];
 
     for (const c of candidates) {
@@ -405,7 +406,7 @@ export class FaceVerificationService {
           .png()
           .toFile(faceFilePath);
 
-        return { faceUrl: `/uploads/${faceFilename}`, rotationDetected: 0 };
+        return { faceUrl: `/api/verification/image/${faceFilename}`, rotationDetected: 0 };
       }
 
       // No face detected in any quadrant

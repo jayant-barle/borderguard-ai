@@ -5,7 +5,7 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import { db } from '../db/database';
-import { authenticateToken, AuthRequest } from '../middleware/auth';
+import { authenticateToken, requireOfficer, requireAdmin, AuthRequest } from '../middleware/auth';
 import { logAuditEvent } from '../middleware/audit';
 import { DemoScenarioService } from '../services/DemoScenarioService';
 import { ImageQualityService } from '../services/ImageQualityService';
@@ -25,6 +25,26 @@ const uploadsDir = path.join(process.cwd(), 'uploads');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
+
+export interface PendingVerification {
+  result: VerificationResult;
+  rawImagePath: string;
+  officerId: number;
+  createdAt: number;
+}
+
+export const pendingVerifications = new Map<string, PendingVerification>();
+
+// Clean up pending records older than 2 hours
+setInterval(() => {
+  const now = Date.now();
+  const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
+  for (const [id, item] of pendingVerifications.entries()) {
+    if (now - item.createdAt > TWO_HOURS_MS) {
+      pendingVerifications.delete(id);
+    }
+  }
+}, 30 * 60 * 1000).unref();
 
 const ALLOWED_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp']);
 const ALLOWED_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
@@ -99,12 +119,18 @@ router.post('/process', authenticateToken, handleUpload, async (req: AuthRequest
       }
 
       const detectedFormat = meta.format;
-      if (!detectedFormat || !['jpeg', 'png', 'webp'].includes(detectedFormat)) {
+      const isAllowedRaster = !!(detectedFormat && ['jpeg', 'png', 'webp'].includes(detectedFormat));
+      const isRegisteredSpecimen = isDemoMode && (
+        DemoScenarioService.isGenuineSpecimen(imageBuffer) ||
+        DemoScenarioService.isTamperedSpecimen(imageBuffer)
+      );
+
+      if (!isAllowedRaster && !isRegisteredSpecimen) {
         return res.status(400).json({ error: 'Uploaded file is not a supported raster image (JPEG, PNG, or WebP required).' });
       }
 
       // Store upload with server-generated name and extension derived strictly from detected format
-      const safeExt = detectedFormat === 'jpeg' ? 'jpg' : detectedFormat;
+      const safeExt = detectedFormat === 'jpeg' ? 'jpg' : detectedFormat === 'svg' ? 'png' : (detectedFormat || 'png');
       const serverFilename = `doc-${Date.now()}-${crypto.randomBytes(8).toString('hex')}.${safeExt}`;
       const savePath = path.join(uploadsDir, serverFilename);
       fs.writeFileSync(savePath, imageBuffer);
@@ -124,11 +150,17 @@ router.post('/process', authenticateToken, handleUpload, async (req: AuthRequest
       }
 
       const detectedFormat = meta.format;
-      if (!detectedFormat || !['jpeg', 'png', 'webp'].includes(detectedFormat)) {
+      const isAllowedRaster = !!(detectedFormat && ['jpeg', 'png', 'webp'].includes(detectedFormat));
+      const isRegisteredSpecimen = isDemoMode && (
+        DemoScenarioService.isGenuineSpecimen(imageBuffer) ||
+        DemoScenarioService.isTamperedSpecimen(imageBuffer)
+      );
+
+      if (!isAllowedRaster && !isRegisteredSpecimen) {
         return res.status(400).json({ error: 'Camera capture is not a supported raster image (JPEG, PNG, or WebP required).' });
       }
 
-      const safeExt = detectedFormat === 'jpeg' ? 'jpg' : detectedFormat;
+      const safeExt = detectedFormat === 'jpeg' ? 'jpg' : detectedFormat === 'svg' ? 'png' : (detectedFormat || 'png');
       const serverFilename = `camera-${Date.now()}-${crypto.randomBytes(8).toString('hex')}.${safeExt}`;
       const savePath = path.join(uploadsDir, serverFilename);
       fs.writeFileSync(savePath, imageBuffer);
@@ -279,6 +311,7 @@ router.post('/process', authenticateToken, handleUpload, async (req: AuthRequest
 
     const processingTimeMs = Date.now() - startTime;
     const verificationId = `VER-${new Date().getFullYear()}-${Math.floor(100000 + Math.random() * 900000)}`;
+    const documentImageUrl = `/api/verification/${verificationId}/image`;
 
     const result: VerificationResult = {
       id: verificationId,
@@ -287,7 +320,7 @@ router.post('/process', authenticateToken, handleUpload, async (req: AuthRequest
       officerName: req.user!.name,
       officerBadge: req.user!.badge_number,
       documentType,
-      documentImage: imagePath, // Preserves the exact user uploaded/adjusted document image
+      documentImage: documentImageUrl,
       documentNumber: ocr.fields.documentNumber.value,
       holderName: ocr.fields.fullName.value,
       aiMode: ollamaAnalysis?.model?.includes('llama') ? 'OLLAMA_AI' : 'HYBRID_AI',
@@ -304,6 +337,13 @@ router.post('/process', authenticateToken, handleUpload, async (req: AuthRequest
       processingTimeMs
     };
 
+    pendingVerifications.set(verificationId, {
+      result,
+      rawImagePath: effectiveImagePath,
+      officerId: req.user!.id,
+      createdAt: Date.now()
+    });
+
     return res.json(result);
   } catch (err: any) {
     console.error('Verification process error:', err);
@@ -312,21 +352,48 @@ router.post('/process', authenticateToken, handleUpload, async (req: AuthRequest
 });
 
 // POST /api/verification/save
-// Persist completed verification result into SQLite
+// Persist completed verification result into SQLite using server-verified pending result
 router.post('/save', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
-    const result: VerificationResult = req.body;
+    const { id, notes } = req.body;
 
-    if (!result || !result.id || !result.documentNumber) {
-      return res.status(400).json({ error: 'Incomplete verification payload.' });
+    if (!id || typeof id !== 'string') {
+      return res.status(400).json({ error: 'Verification ID is required to save a record.' });
     }
 
-    const currentIso = result.timestamp && !isNaN(new Date(result.timestamp).getTime())
-      ? new Date(result.timestamp).toISOString()
-      : new Date().toISOString();
+    // Check if record already exists in database
+    const existing = db.prepare('SELECT verification_id, officer_id FROM verification_sessions WHERE verification_id = ?').get(id) as { verification_id: string; officer_id: number } | undefined;
+
+    if (existing) {
+      // If existing session belongs to another officer and requester is not an admin, deny with 403 Forbidden
+      if (existing.officer_id !== req.user!.id && req.user!.role !== 'ADMIN') {
+        return res.status(403).json({ error: 'Forbidden: You cannot modify a verification session created by another officer.' });
+      }
+      // Otherwise reject duplicate save with 409 Conflict
+      return res.status(409).json({ error: 'Conflict: Verification record has already been saved.' });
+    }
+
+    // Look up pending verification record computed on server
+    const pending = pendingVerifications.get(id);
+    if (!pending) {
+      return res.status(404).json({ error: 'Verification session not found or expired. Please re-run verification.' });
+    }
+
+    // Enforce ownership: only the officer who ran /process (or an admin) can save it
+    if (pending.officerId !== req.user!.id && req.user!.role !== 'ADMIN') {
+      return res.status(403).json({ error: 'Forbidden: You cannot save a verification session created by another officer.' });
+    }
+
+    // Use server-computed result as the immutable source of truth
+    const serverResult: VerificationResult = pending.result;
+    if (notes && typeof notes === 'string') {
+      serverResult.notes = notes;
+    }
+
+    const currentIso = new Date().toISOString();
 
     const insert = db.prepare(`
-      INSERT OR REPLACE INTO verification_sessions (
+      INSERT INTO verification_sessions (
         verification_id, officer_id, officer_name, officer_badge,
         document_type, document_image, document_number, holder_name,
         ai_mode, scenario_detected, risk_score, risk_level, final_status,
@@ -335,35 +402,42 @@ router.post('/save', authenticateToken, async (req: AuthRequest, res: Response) 
     `);
 
     insert.run(
-      result.id,
+      serverResult.id,
       req.user!.id,
       req.user!.name,
       req.user!.badge_number || 'N/A',
-      result.documentType,
-      result.documentImage,
-      result.documentNumber,
-      result.holderName,
-      result.aiMode,
-      result.scenarioDetected,
-      result.risk.score,
-      result.risk.level,
-      result.risk.status,
-      result.processingTimeMs,
-      JSON.stringify({ ...result, timestamp: currentIso }),
-      result.notes || '',
+      serverResult.documentType,
+      serverResult.documentImage,
+      serverResult.documentNumber,
+      serverResult.holderName,
+      serverResult.aiMode,
+      serverResult.scenarioDetected,
+      serverResult.risk.score,
+      serverResult.risk.level,
+      serverResult.risk.status,
+      serverResult.processingTimeMs,
+      JSON.stringify({
+        ...serverResult,
+        rawImagePath: pending.rawImagePath,
+        timestamp: currentIso
+      }),
+      serverResult.notes || '',
       currentIso
     );
+
+    // Remove from in-memory pending map once safely persisted
+    pendingVerifications.delete(id);
 
     logAuditEvent(
       req.user!,
       'VERIFICATION_SAVED',
       'VERIFICATION',
-      result.id,
-      `Saved verification report for ${result.holderName} (${result.documentNumber}) — Result: ${result.risk.level} (${result.risk.score}/100)`,
+      serverResult.id,
+      `Saved verification report for ${serverResult.holderName} (${serverResult.documentNumber}) — Result: ${serverResult.risk.level} (${serverResult.risk.score}/100)`,
       req.ip || '127.0.0.1'
     );
 
-    return res.json({ success: true, message: 'Verification record successfully saved.', id: result.id });
+    return res.json({ success: true, message: 'Verification record successfully saved.', id: serverResult.id });
   } catch (err: any) {
     console.error('Save verification error:', err);
     return res.status(500).json({ error: 'Failed to save verification record to database.' });
@@ -463,8 +537,8 @@ router.get('/history', authenticateToken, (req: AuthRequest, res: Response) => {
 });
 
 // DELETE /api/verification/history
-// Clear all verification history sessions
-router.delete('/history', authenticateToken, (req: AuthRequest, res: Response) => {
+// Clear all verification history sessions (Restricted strictly to administrators)
+router.delete('/history', authenticateToken, requireAdmin, (req: AuthRequest, res: Response) => {
   try {
     const info = db.prepare('DELETE FROM verification_sessions').run();
     logAuditEvent(
@@ -479,6 +553,112 @@ router.delete('/history', authenticateToken, (req: AuthRequest, res: Response) =
   } catch (err: any) {
     console.error('Clear history error:', err);
     return res.status(500).json({ error: 'Failed to clear verification history.' });
+  }
+});
+
+// GET /api/verification/image/:filename
+// Authenticated access to uploaded raster images with strict containment
+router.get('/image/:filename', authenticateToken, requireOfficer, (req: AuthRequest, res: Response) => {
+  try {
+    const rawFilename = String(req.params.filename || '');
+    if (!rawFilename || !/^[a-zA-Z0-9_\-\.]+$/.test(rawFilename)) {
+      return res.status(400).json({ error: 'Invalid filename parameter.' });
+    }
+
+    const safeFilename = path.basename(rawFilename);
+    const resolvedPath = path.resolve(uploadsDir, safeFilename);
+
+    if (!resolvedPath.startsWith(uploadsDir + path.sep)) {
+      return res.status(400).json({ error: 'Access denied: Path traversal detected.' });
+    }
+
+    if (!fs.existsSync(resolvedPath)) {
+      return res.status(404).json({ error: 'Requested image not found.' });
+    }
+
+    const ext = path.extname(safeFilename).toLowerCase();
+    const mimeMap: Record<string, string> = {
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.png': 'image/png',
+      '.webp': 'image/webp'
+    };
+    const contentType = mimeMap[ext] || 'application/octet-stream';
+
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Disposition', 'inline');
+
+    return fs.createReadStream(resolvedPath).pipe(res);
+  } catch (err: any) {
+    return res.status(500).json({ error: 'Failed to stream document image.' });
+  }
+});
+
+// GET /api/verification/:id/image
+// Authenticated access to verification document image by verification ID
+router.get('/:id/image', authenticateToken, requireOfficer, (req: AuthRequest, res: Response) => {
+  try {
+    const id = String(req.params.id || '');
+    let targetFilePath = '';
+
+    const pending = pendingVerifications.get(id);
+    if (pending && pending.rawImagePath) {
+      targetFilePath = pending.rawImagePath;
+    } else {
+      const record = db.prepare('SELECT document_image, details_json FROM verification_sessions WHERE verification_id = ?').get(id) as any;
+      if (!record) {
+        return res.status(404).json({ error: 'Verification report not found.' });
+      }
+      try {
+        const details = JSON.parse(record.details_json);
+        targetFilePath = details.rawImagePath || record.document_image;
+      } catch {
+        targetFilePath = record.document_image;
+      }
+    }
+
+    if (!targetFilePath) {
+      return res.status(404).json({ error: 'No image associated with this verification.' });
+    }
+
+    let candidatePath: string;
+    if (targetFilePath.startsWith('/assets/') || targetFilePath.startsWith('assets/')) {
+      const clean = targetFilePath.replace(/^\/+/, '');
+      candidatePath = path.resolve(process.cwd(), clean);
+    } else {
+      const filename = path.basename(targetFilePath);
+      candidatePath = path.resolve(uploadsDir, filename);
+    }
+
+    const assetsDirResolved = path.resolve(process.cwd(), 'assets');
+    const isInsideUploads = candidatePath.startsWith(uploadsDir + path.sep);
+    const isInsideAssets = candidatePath.startsWith(assetsDirResolved + path.sep);
+
+    if (!isInsideUploads && !isInsideAssets) {
+      return res.status(400).json({ error: 'Access denied: Path traversal detected.' });
+    }
+
+    if (!fs.existsSync(candidatePath)) {
+      return res.status(404).json({ error: 'Image file not found on disk.' });
+    }
+
+    const ext = path.extname(candidatePath).toLowerCase();
+    const mimeMap: Record<string, string> = {
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.png': 'image/png',
+      '.webp': 'image/webp'
+    };
+    const contentType = mimeMap[ext] || 'application/octet-stream';
+
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Disposition', 'inline');
+
+    return fs.createReadStream(candidatePath).pipe(res);
+  } catch (err: any) {
+    return res.status(500).json({ error: 'Failed to retrieve document image.' });
   }
 });
 
