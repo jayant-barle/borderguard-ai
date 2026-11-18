@@ -70,29 +70,44 @@ export const TamperingForensicsView: React.FC<TamperingForensicsViewProps> = ({ 
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {tampering.indicators.map((ind, idx) => {
-            const isFlagged = ind.detected || ind.score > 50;
+            const isNotEvaluated = ind.evaluated === false;
+            const isFlagged = !isNotEvaluated && (ind.detected || ind.score > 50);
             return (
               <div
                 key={idx}
                 className={`p-3.5 rounded-xl border transition-all ${
-                  isFlagged
+                  isNotEvaluated
+                    ? 'bg-slate-50 border-slate-200 text-slate-600 opacity-75'
+                    : isFlagged
                     ? 'bg-rose-50/40 border-rose-200 text-rose-950 shadow-2xs'
                     : 'bg-slate-50/60 border-slate-200/80 text-slate-800'
                 }`}
               >
                 <div className="flex items-center justify-between mb-1.5">
                   <span className="text-xs font-bold">{ind.name}</span>
-                  <span
-                    className={`text-[10px] font-bold px-2 py-0.5 rounded ${
-                      isFlagged
-                        ? 'bg-rose-600 text-white'
-                        : 'bg-emerald-100 text-emerald-800'
-                    }`}
-                  >
-                    {isFlagged ? `ANOMALY (${ind.score}%)` : `NORMAL (${ind.score}%)`}
-                  </span>
+                  {isNotEvaluated ? (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-200 text-slate-700">
+                      NOT EVALUATED
+                    </span>
+                  ) : (
+                    <span
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                        isFlagged
+                          ? 'bg-rose-600 text-white'
+                          : 'bg-emerald-100 text-emerald-800'
+                      }`}
+                    >
+                      {isFlagged ? `ANOMALY (${ind.score}%)` : `NORMAL (${ind.score}%)`}
+                    </span>
+                  )}
                 </div>
                 <p className="text-[11px] text-slate-600 leading-relaxed">{ind.description}</p>
+                {ind.value !== undefined && ind.threshold !== undefined && (
+                  <div className="mt-2 pt-1.5 border-t border-slate-200/60 flex items-center justify-between text-[10px] font-mono text-slate-500">
+                    <span>Measured: <strong className="text-slate-700">{ind.value}</strong></span>
+                    <span>Threshold: <strong className="text-slate-700">{ind.threshold}</strong></span>
+                  </div>
+                )}
               </div>
             );
           })}

@@ -146,6 +146,9 @@ export interface TamperingIndicator {
   description: string;
   detected: boolean;
   score: number; // 0-100 anomaly level
+  value?: number; // Measured forensic metric
+  threshold?: number; // Detection threshold
+  evaluated?: boolean; // Whether the measurement was actually performed
 }
 
 export interface TamperingResult {
@@ -156,12 +159,13 @@ export interface TamperingResult {
   indicators: TamperingIndicator[];
   summary: string;
   highlightCoordinates?: { x: number; y: number; width: number; height: number };
+  approximatePortraitRegion?: { left: number; top: number; width: number; height: number };
 }
 
 export interface FaceVerificationResult {
   status?: 'PASSED' | 'FAILED' | 'ERROR';
-  consistency: 'LIKELY_MATCH' | 'POSSIBLE_MISMATCH' | 'DEFINITE_MISMATCH' | 'NO_FACE_DETECTED' | 'ERROR';
-  similarityScore: number | null; // 0-100 or null if analysis failed
+  consistency: 'LIKELY_MATCH' | 'POSSIBLE_MISMATCH' | 'DEFINITE_MISMATCH' | 'NO_FACE_DETECTED' | 'NOT_EVALUATED' | 'ERROR';
+  similarityScore: number | null; // 0-100 or null if analysis failed or not evaluated
   confidence: number | null;
   extractedFaceUrl?: string;
   databaseFaceUrl?: string;
@@ -171,6 +175,7 @@ export interface FaceVerificationResult {
   summary: string;
   rotationDetected?: number;
   uprightedDocUrl?: string;
+  evaluated?: boolean;
 }
 
 export interface DatabaseVerificationResult {
@@ -251,7 +256,6 @@ export interface RiskConfig {
   qualityWeight: number;
   lowThreshold: number;
   mediumThreshold: number;
-  highThreshold: number;
   updatedAt: string;
   updatedBy?: string;
 }
