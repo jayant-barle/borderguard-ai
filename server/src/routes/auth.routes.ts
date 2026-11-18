@@ -7,6 +7,63 @@ import { User } from '../../../shared/types';
 
 const router = Router();
 
+export interface FailedLoginRecord {
+  count: number;
+  firstAttemptTime: number;
+  lastAttemptTime: number;
+}
+
+export const loginAttempts = new Map<string, FailedLoginRecord>();
+const MAX_FAILED_ATTEMPTS = 5;
+const LOCKOUT_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
+
+export function getRateLimitKey(ip: string, email: string): string {
+  const cleanIp = (ip || '127.0.0.1').trim().toLowerCase();
+  const cleanEmail = (email || '').trim().toLowerCase();
+  return `${cleanIp}:${cleanEmail}`;
+}
+
+export function checkLoginRateLimit(key: string): { locked: boolean; retryAfter: number } {
+  const now = Date.now();
+  const existing = loginAttempts.get(key);
+  if (!existing) {
+    return { locked: false, retryAfter: 0 };
+  }
+  if (now - existing.firstAttemptTime > LOCKOUT_WINDOW_MS) {
+    loginAttempts.delete(key);
+    return { locked: false, retryAfter: 0 };
+  }
+  if (existing.count >= MAX_FAILED_ATTEMPTS) {
+    const retryAfter = Math.max(1, Math.ceil((existing.firstAttemptTime + LOCKOUT_WINDOW_MS - now) / 1000));
+    return { locked: true, retryAfter };
+  }
+  return { locked: false, retryAfter: 0 };
+}
+
+export function recordFailedLogin(key: string): { count: number; locked: boolean; retryAfter: number } {
+  const now = Date.now();
+  const existing = loginAttempts.get(key);
+  if (!existing || now - existing.firstAttemptTime > LOCKOUT_WINDOW_MS) {
+    loginAttempts.set(key, { count: 1, firstAttemptTime: now, lastAttemptTime: now });
+    return { count: 1, locked: false, retryAfter: 0 };
+  }
+  existing.count += 1;
+  existing.lastAttemptTime = now;
+  loginAttempts.set(key, existing);
+
+  const locked = existing.count >= MAX_FAILED_ATTEMPTS;
+  const retryAfter = Math.max(1, Math.ceil((existing.firstAttemptTime + LOCKOUT_WINDOW_MS - now) / 1000));
+  return { count: existing.count, locked, retryAfter };
+}
+
+export function clearLoginAttempts(key?: string) {
+  if (key) {
+    loginAttempts.delete(key);
+  } else {
+    loginAttempts.clear();
+  }
+}
+
 // POST /api/auth/login
 router.post('/login', async (req: Request, res: Response) => {
   try {
@@ -16,9 +73,23 @@ router.post('/login', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Email and password are required.' });
     }
 
+    const clientIp = (req.ip || req.socket.remoteAddress || '127.0.0.1').toString();
+    const rateKey = getRateLimitKey(clientIp, email);
+
+    // Check rate limit status
+    const rateCheck = checkLoginRateLimit(rateKey);
+    if (rateCheck.locked) {
+      res.setHeader('Retry-After', rateCheck.retryAfter.toString());
+      return res.status(429).json({
+        error: `Too many failed login attempts. Please try again in ${rateCheck.retryAfter} seconds.`,
+        retryAfter: rateCheck.retryAfter
+      });
+    }
+
     const user = db.prepare('SELECT * FROM users WHERE LOWER(email) = LOWER(?)').get(email) as any;
 
     if (!user) {
+      recordFailedLogin(rateKey);
       return res.status(401).json({ error: 'Invalid credentials. Please check your email and password.' });
     }
 
@@ -28,8 +99,12 @@ router.post('/login', async (req: Request, res: Response) => {
 
     const isMatch = await bcrypt.compare(password, user.password_hash);
     if (!isMatch) {
+      recordFailedLogin(rateKey);
       return res.status(401).json({ error: 'Invalid credentials. Please check your email and password.' });
     }
+
+    // Login successful: reset rate limit attempts for this IP + email
+    clearLoginAttempts(rateKey);
 
     const safeUser: User = {
       id: user.id,

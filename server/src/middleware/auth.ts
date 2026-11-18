@@ -1,9 +1,19 @@
+import 'dotenv/config';
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { User, UserRole } from '../../../shared/types';
 import { db } from '../db/database';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'borderguard-super-secret-security-key-2026';
+export function validateJwtSecret(secret?: string): boolean {
+  if (!secret || secret.trim().length < 32) {
+    throw new Error('FATAL: JWT_SECRET environment variable is missing or shorter than 32 characters. Set a secure secret (>= 32 characters) in .env before starting the server.');
+  }
+  return true;
+}
+
+const rawSecret = process.env.JWT_SECRET;
+validateJwtSecret(rawSecret);
+export const JWT_SECRET: string = rawSecret!.trim();
 
 export interface AuthRequest extends Request {
   user?: User;

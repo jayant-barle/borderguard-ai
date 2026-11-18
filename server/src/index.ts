@@ -20,6 +20,7 @@ const PORT = process.env.PORT || 5000;
 
 process.on('uncaughtException', (err) => {
   console.error('[SatyaShield Server Uncaught Exception]:', err);
+  process.exit(1);
 });
 
 process.on('unhandledRejection', (reason, promise) => {
@@ -46,7 +47,8 @@ if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 if (!fs.existsSync(assetsDir)) fs.mkdirSync(assetsDir, { recursive: true });
 
 // Static assets
-app.use('/uploads', express.static(uploadsDir));
+// NOTE: /uploads is deliberately NOT served statically to protect private document images.
+// Uploads are accessible only via authenticated endpoints (/api/verification/:id/image).
 app.use('/assets', express.static(assetsDir));
 
 // API Routes
@@ -64,7 +66,7 @@ app.get('/api/health', async (_req, res) => {
   res.json({
     status: 'HEALTHY',
     service: 'SatyaShield AI Security Engine',
-    version: '2.4.0-SIH',
+    version: '2.5.0',
     mode: ollamaStatus.connected ? 'OLLAMA_AI' : 'DEMO_MODE',
     ollama: {
       connected: ollamaStatus.connected,
@@ -74,6 +76,28 @@ app.get('/api/health', async (_req, res) => {
     },
     timestamp: new Date().toISOString()
   });
+});
+
+// Catch-all for undefined /api/* endpoints - return JSON 404
+app.all('/api/*', (_req, res) => {
+  res.status(404).json({ error: 'Endpoint not found' });
+});
+
+// Explicitly reject direct access to /uploads/* with 404 (prevent SPA fallback from serving index.html)
+app.all('/uploads/*', (_req, res) => {
+  res.status(404).json({ error: 'Direct access to uploads is disabled. Use authenticated verification endpoints.' });
+});
+
+// Express error-handling middleware (Multer errors & unhandled errors)
+app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  if (err?.name === 'MulterError' || err?.code === 'LIMIT_FILE_SIZE') {
+    return res.status(400).json({ error: `File upload error: ${err.message}` });
+  }
+  if (err?.status || err?.statusCode) {
+    return res.status(err.status || err.statusCode).json({ error: err.message });
+  }
+  console.error('[Unhandled Server Error]:', err);
+  return res.status(500).json({ error: err?.message || 'Internal server error' });
 });
 
 // Serve frontend in production build if present
@@ -100,3 +124,20 @@ const server = app.listen(PORT, async () => {
   }
   console.log(`=======================================================`);
 });
+
+// Keep Node event loop active on Windows
+const keepAliveTimer = setInterval(() => {}, 1000 * 60 * 60);
+
+const shutdown = () => {
+  clearInterval(keepAliveTimer);
+  server.close(() => {
+    process.exit(0);
+  });
+};
+
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);
+
+export { app, server };
+export default app;
+

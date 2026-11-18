@@ -87,11 +87,14 @@ BorderGuard AI features a dedicated, transparent **AI Engine: Demo Mode** badge 
 
 ## 🚀 Quick Start Guide
 
-### 1. Install Dependencies
+### 1. Install Dependencies & Configure Environment
 ```bash
 npm install
 npm run --prefix client install
+cp .env.example .env
 ```
+> [!IMPORTANT]
+> **Security Requirement:** `JWT_SECRET` in `.env` must be set and contain at least 32 characters. The server will refuse to start if `JWT_SECRET` is missing or shorter than 32 characters.
 
 ### 2. Run Automated Pipeline Test Suite
 ```bash
