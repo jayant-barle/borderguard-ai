@@ -130,7 +130,6 @@ router.get('/risk-config', (_req: AuthRequest, res: Response) => {
       qualityWeight: config.quality_weight,
       lowThreshold: config.low_threshold,
       mediumThreshold: config.medium_threshold,
-      highThreshold: config.high_threshold,
       updatedAt: config.updated_at,
       updatedBy: config.updated_by
     };
@@ -152,8 +151,7 @@ router.put('/risk-config', (req: AuthRequest, res: Response) => {
       docValidWeight,
       qualityWeight,
       lowThreshold,
-      mediumThreshold,
-      highThreshold
+      mediumThreshold
     } = req.body;
 
     // Validate weights sum to approximately 100
@@ -172,7 +170,7 @@ router.put('/risk-config', (req: AuthRequest, res: Response) => {
     }
 
     // Validate threshold logic
-    if (lowThreshold >= mediumThreshold || mediumThreshold >= highThreshold) {
+    if (lowThreshold >= mediumThreshold || lowThreshold < 0 || mediumThreshold > 100) {
       return res.status(400).json({
         error: 'Invalid risk threshold values. Low threshold must be less than Medium threshold.'
       });
@@ -182,8 +180,8 @@ router.put('/risk-config', (req: AuthRequest, res: Response) => {
       INSERT INTO risk_config (
         tampering_weight, face_mismatch_weight, database_weight,
         mrz_weight, doc_valid_weight, quality_weight,
-        low_threshold, medium_threshold, high_threshold, updated_by
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        low_threshold, medium_threshold, updated_by
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     insert.run(
@@ -195,7 +193,6 @@ router.put('/risk-config', (req: AuthRequest, res: Response) => {
       qualityWeight,
       lowThreshold,
       mediumThreshold,
-      highThreshold,
       req.user!.name
     );
 

@@ -163,8 +163,7 @@ export const RiskSettings: React.FC = () => {
         docValidWeight,
         qualityWeight,
         lowThreshold,
-        mediumThreshold,
-        highThreshold: 100
+        mediumThreshold
       });
       setSuccessMsg('Risk Engine configuration calibrated and persisted successfully.');
       loadConfig();
@@ -492,7 +491,7 @@ export const RiskSettings: React.FC = () => {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
               <div className="p-4 rounded-xl border border-emerald-200 bg-emerald-50/50 space-y-2">
                 <span className="font-bold text-emerald-800">LOW RISK (Verified)</span>
-                <p className="text-[11px] text-emerald-700">Scores between 0 and {lowThreshold}</p>
+                <p className="text-[11px] text-emerald-700">Score &lt; {lowThreshold}</p>
                 <div>
                   <label className="block text-[10px] uppercase font-bold text-slate-600 mb-1">
                     Upper Cutoff:
@@ -511,7 +510,7 @@ export const RiskSettings: React.FC = () => {
               <div className="p-4 rounded-xl border border-amber-200 bg-amber-50/50 space-y-2">
                 <span className="font-bold text-amber-800">MEDIUM RISK (Suspicious)</span>
                 <p className="text-[11px] text-amber-700">
-                  Scores between {lowThreshold + 1} and {mediumThreshold}
+                  {lowThreshold} &le; Score &lt; {mediumThreshold}
                 </p>
                 <div>
                   <label className="block text-[10px] uppercase font-bold text-slate-600 mb-1">
@@ -531,7 +530,7 @@ export const RiskSettings: React.FC = () => {
               <div className="p-4 rounded-xl border border-rose-200 bg-rose-50/50 space-y-2">
                 <span className="font-bold text-rose-800">HIGH RISK (Flagged)</span>
                 <p className="text-[11px] text-rose-700">
-                  Scores between {mediumThreshold + 1} and 100
+                  Score &ge; {mediumThreshold} (or hard overrides)
                 </p>
                 <div className="pt-3 text-[11px] text-rose-600 font-semibold">
                   Trigger mandatory manual secondary inspection.

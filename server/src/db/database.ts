@@ -7,29 +7,26 @@ if (!fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
 }
 
-// Cache all prepared statements on prototype to prevent Node 24 V8 isolate GC destructor assertion
-const statementCache = new Map<string, any>();
-const origPrepare = (Database.prototype as any).prepare;
-(Database.prototype as any).prepare = function (source: string) {
-  const trimmed = source.trim();
-  let stmt = statementCache.get(trimmed);
-  if (!stmt) {
-    stmt = origPrepare.call(this, trimmed);
-    statementCache.set(trimmed, stmt);
-  }
-  return stmt;
-};
-
 const dbPath = path.join(dataDir, 'borderguard.db');
 export const db = new Database(dbPath);
 
+// Prevent Node 24 V8 isolate GC destructor assertion on Windows by retaining references
+const statementRegistry: any[] = [];
+const origPrepare = db.prepare.bind(db);
+(db as any).prepare = function (sql: string) {
+  const stmt = origPrepare(sql);
+  statementRegistry.push(stmt);
+  return stmt;
+};
+
 // Enable foreign keys and WAL mode for high performance
-db.pragma('journal_mode = WAL');
-db.pragma('foreign_keys = ON');
+db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
+
+
 
 export function initDatabase() {
-  const schemaStatements = [
-    `CREATE TABLE IF NOT EXISTS users (
+  const schema = `
+    CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
       email TEXT UNIQUE NOT NULL,
@@ -38,8 +35,8 @@ export function initDatabase() {
       is_active INTEGER NOT NULL DEFAULT 1,
       badge_number TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )`,
-    `CREATE TABLE IF NOT EXISTS documents (
+    );
+    CREATE TABLE IF NOT EXISTS documents (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       document_number TEXT UNIQUE NOT NULL,
       document_type TEXT NOT NULL,
@@ -53,8 +50,8 @@ export function initDatabase() {
       photo_url TEXT,
       notes TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )`,
-    `CREATE TABLE IF NOT EXISTS risk_config (
+    );
+    CREATE TABLE IF NOT EXISTS risk_config (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       tampering_weight REAL NOT NULL DEFAULT 30,
       face_mismatch_weight REAL NOT NULL DEFAULT 30,
@@ -64,11 +61,10 @@ export function initDatabase() {
       quality_weight REAL NOT NULL DEFAULT 5,
       low_threshold REAL NOT NULL DEFAULT 30,
       medium_threshold REAL NOT NULL DEFAULT 60,
-      high_threshold REAL NOT NULL DEFAULT 100,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_by TEXT DEFAULT 'System'
-    )`,
-    `CREATE TABLE IF NOT EXISTS verification_sessions (
+    );
+    CREATE TABLE IF NOT EXISTS verification_sessions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       verification_id TEXT UNIQUE NOT NULL,
       officer_id INTEGER NOT NULL,
@@ -88,8 +84,8 @@ export function initDatabase() {
       notes TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (officer_id) REFERENCES users(id)
-    )`,
-    `CREATE TABLE IF NOT EXISTS audit_logs (
+    );
+    CREATE TABLE IF NOT EXISTS audit_logs (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL,
       user_name TEXT NOT NULL,
@@ -100,14 +96,26 @@ export function initDatabase() {
       details TEXT NOT NULL,
       ip_address TEXT DEFAULT '127.0.0.1',
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )`
-  ];
+    );
+  `;
 
-  for (const stmt of schemaStatements) {
-    try {
-      db.prepare(stmt).run();
-    } catch (e: any) {
-      console.warn('Schema init note:', e.message);
+  db.exec(schema);
+  migrateDatabase();
+}
+
+/**
+ * Perform database migrations on existing schema
+ */
+export function migrateDatabase() {
+  try {
+    const tableInfo = db.prepare("PRAGMA table_info(risk_config)").all() as Array<{ name: string }>;
+    const hasHighThreshold = tableInfo.some((col) => col.name === 'high_threshold');
+    if (hasHighThreshold) {
+      db.exec('ALTER TABLE risk_config DROP COLUMN high_threshold;');
+      console.log('[Database] Migrated risk_config table: dropped redundant high_threshold column.');
     }
+  } catch (err: any) {
+    console.warn('[Database] Note on risk_config migration:', err.message);
   }
 }
+

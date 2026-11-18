@@ -24,8 +24,8 @@ export function seedDatabase() {
   const configCount = db.prepare('SELECT COUNT(*) as count FROM risk_config').get() as { count: number };
   if (configCount.count === 0) {
     db.prepare(`
-      INSERT INTO risk_config (tampering_weight, face_mismatch_weight, database_weight, mrz_weight, doc_valid_weight, quality_weight, low_threshold, medium_threshold, high_threshold, updated_by)
-      VALUES (30, 30, 15, 10, 10, 5, 30, 60, 100, 'System Initializer')
+      INSERT INTO risk_config (tampering_weight, face_mismatch_weight, database_weight, mrz_weight, doc_valid_weight, quality_weight, low_threshold, medium_threshold, updated_by)
+      VALUES (30, 30, 15, 10, 10, 5, 30, 60, 'System Initializer')
     `).run();
   }
 
