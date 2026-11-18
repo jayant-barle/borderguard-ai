@@ -1,4 +1,6 @@
-import { Router, Response } from 'express';
+import crypto from 'crypto';
+import sharp from 'sharp';
+import { Router, Response, NextFunction } from 'express';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
@@ -18,38 +20,54 @@ import { DocumentType, VerificationResult, AIMode } from '../../../shared/types'
 
 const router = Router();
 
-// Configure multer storage for uploaded verification documents
+// Configure secure upload directory
 const uploadsDir = path.join(process.cwd(), 'uploads');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => {
-    cb(null, uploadsDir);
-  },
-  filename: (_req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    cb(null, 'doc-' + uniqueSuffix + path.extname(file.originalname || '.png'));
-  }
-});
+const ALLOWED_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp']);
+const ALLOWED_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 15 * 1024 * 1024 }, // 15MB limit
   fileFilter: (_req, file, cb) => {
-    const allowed = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
-    if (allowed.includes(file.mimetype) || file.originalname.match(/\.(jpg|jpeg|png|webp)$/i)) {
+    const ext = path.extname(file.originalname || '').toLowerCase();
+    const mime = (file.mimetype || '').toLowerCase();
+
+    const isValidExt = ALLOWED_EXTENSIONS.has(ext);
+    const isValidMime = ALLOWED_MIME_TYPES.has(mime);
+
+    const mimeMatchesExt =
+      ((ext === '.jpg' || ext === '.jpeg') && mime === 'image/jpeg') ||
+      (ext === '.png' && mime === 'image/png') ||
+      (ext === '.webp' && mime === 'image/webp');
+
+    if (isValidExt && isValidMime && mimeMatchesExt) {
       cb(null, true);
     } else {
-      cb(new Error('Invalid file format. Only JPG, JPEG, and PNG images are supported.'));
+      cb(new Error('Invalid file format. Uploads must be valid .jpg, .jpeg, .png, or .webp images matching their MIME type.'));
     }
   }
 });
 
+// Middleware to capture multer errors and return JSON 400
+const handleUpload = (req: any, res: any, next: NextFunction) => {
+  upload.single('document')(req, res, (err: any) => {
+    if (err) {
+      if (err instanceof multer.MulterError) {
+        return res.status(400).json({ error: `File upload error: ${err.message}` });
+      }
+      return res.status(400).json({ error: err.message || 'File upload rejected.' });
+    }
+    next();
+  });
+};
+
 // POST /api/verification/process
 // Accepts multipart/form-data or JSON (base64 image)
-router.post('/process', authenticateToken, upload.single('document'), async (req: AuthRequest, res: Response) => {
+router.post('/process', authenticateToken, handleUpload, async (req: AuthRequest, res: Response) => {
   const startTime = Date.now();
 
   try {
@@ -70,28 +88,74 @@ router.post('/process', authenticateToken, upload.single('document'), async (req
     let filename = '';
 
     if (req.file) {
-      imageBuffer = fs.readFileSync(req.file.path);
-      imagePath = `/uploads/${req.file.filename}`;
-      filename = req.file.originalname;
+      imageBuffer = req.file.buffer;
+
+      // Validate magic bytes with sharp metadata
+      let meta: sharp.Metadata;
+      try {
+        meta = await sharp(imageBuffer).metadata();
+      } catch (sharpErr: any) {
+        return res.status(400).json({ error: 'Uploaded file is corrupt or not a decodable image.' });
+      }
+
+      const detectedFormat = meta.format;
+      if (!detectedFormat || !['jpeg', 'png', 'webp'].includes(detectedFormat)) {
+        return res.status(400).json({ error: 'Uploaded file is not a supported raster image (JPEG, PNG, or WebP required).' });
+      }
+
+      // Store upload with server-generated name and extension derived strictly from detected format
+      const safeExt = detectedFormat === 'jpeg' ? 'jpg' : detectedFormat;
+      const serverFilename = `doc-${Date.now()}-${crypto.randomBytes(8).toString('hex')}.${safeExt}`;
+      const savePath = path.join(uploadsDir, serverFilename);
+      fs.writeFileSync(savePath, imageBuffer);
+
+      imagePath = `/uploads/${serverFilename}`;
+      filename = serverFilename;
     } else if (req.body.imageBase64) {
       // Handle camera capture sent as base64
       const base64Data = req.body.imageBase64.replace(/^data:image\/\w+;base64,/, '');
       imageBuffer = Buffer.from(base64Data, 'base64');
-      const uniqueName = `camera-${Date.now()}.png`;
-      const savePath = path.join(uploadsDir, uniqueName);
-      fs.writeFileSync(savePath, imageBuffer);
-      imagePath = `/uploads/${uniqueName}`;
-      filename = uniqueName;
-    } else if (req.body.sampleSpecimenUrl) {
-      // Direct sample specimen trigger
-      const specimenPath = path.join(process.cwd(), req.body.sampleSpecimenUrl.replace(/^\//, ''));
-      if (fs.existsSync(specimenPath)) {
-        imageBuffer = fs.readFileSync(specimenPath);
-      } else {
-        imageBuffer = Buffer.from('DEMO_PASSPORT_SPECIMEN');
+
+      let meta: sharp.Metadata;
+      try {
+        meta = await sharp(imageBuffer).metadata();
+      } catch (sharpErr: any) {
+        return res.status(400).json({ error: 'Camera capture data is corrupt or not a decodable image.' });
       }
-      imagePath = req.body.sampleSpecimenUrl;
-      filename = path.basename(req.body.sampleSpecimenUrl);
+
+      const detectedFormat = meta.format;
+      if (!detectedFormat || !['jpeg', 'png', 'webp'].includes(detectedFormat)) {
+        return res.status(400).json({ error: 'Camera capture is not a supported raster image (JPEG, PNG, or WebP required).' });
+      }
+
+      const safeExt = detectedFormat === 'jpeg' ? 'jpg' : detectedFormat;
+      const serverFilename = `camera-${Date.now()}-${crypto.randomBytes(8).toString('hex')}.${safeExt}`;
+      const savePath = path.join(uploadsDir, serverFilename);
+      fs.writeFileSync(savePath, imageBuffer);
+
+      imagePath = `/uploads/${serverFilename}`;
+      filename = serverFilename;
+    } else if (req.body.sampleSpecimenUrl) {
+      // Direct sample specimen trigger - strictly contain within assets/specimens/
+      const rawUrl = String(req.body.sampleSpecimenUrl || '');
+      const specimensDir = path.resolve(process.cwd(), 'assets', 'specimens');
+      const relativeClean = rawUrl.replace(/^\/+/, '');
+      const candidatePath = relativeClean.startsWith('assets' + path.sep) || relativeClean.startsWith('assets/')
+        ? path.resolve(process.cwd(), relativeClean)
+        : path.resolve(specimensDir, relativeClean);
+
+      // Verify path containment
+      if (!candidatePath.startsWith(specimensDir + path.sep)) {
+        return res.status(400).json({ error: 'Path traversal attempt detected. Specimen must reside within assets/specimens/.' });
+      }
+
+      if (!fs.existsSync(candidatePath)) {
+        return res.status(404).json({ error: `Specimen not found: ${path.basename(candidatePath)}` });
+      }
+
+      imageBuffer = fs.readFileSync(candidatePath);
+      imagePath = `/assets/specimens/${path.basename(candidatePath)}`;
+      filename = path.basename(candidatePath);
     } else {
       return res.status(400).json({ error: 'No document image provided. Please upload an image or scan with camera.' });
     }
