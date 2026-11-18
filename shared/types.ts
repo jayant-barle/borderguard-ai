@@ -12,7 +12,7 @@ export interface User {
 
 export type DocumentType = 'PASSPORT' | 'VISA' | 'NATIONAL_ID' | 'DRIVING_LICENSE' | 'PERMIT';
 
-export type DocumentStatus = 'ACTIVE' | 'EXPIRED' | 'SUSPENDED' | 'BLACKLISTED' | 'SUSPICIOUS';
+export type DocumentStatus = 'ACTIVE' | 'EXPIRED' | 'SUSPENDED' | 'BLACKLISTED' | 'SUSPICIOUS' | 'PENDING_VERIFICATION';
 
 export interface DocumentRecord {
   id: number;
@@ -20,10 +20,10 @@ export interface DocumentRecord {
   document_type: DocumentType;
   holder_name: string;
   nationality: string;
-  date_of_birth: string;
+  date_of_birth: string | null;
   gender: string;
-  issue_date: string;
-  expiry_date: string;
+  issue_date: string | null;
+  expiry_date: string | null;
   status: DocumentStatus;
   photo_url?: string;
   notes?: string;
@@ -110,8 +110,8 @@ export interface OCRResult {
 export interface MRZChecksum {
   name: string;
   field: string;
-  expected: string;
-  computed: string;
+  expected: string | null;
+  computed: string | null;
   valid: boolean;
 }
 
